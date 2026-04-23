@@ -7,25 +7,31 @@ const { runScan } = require('./src/scanner');
 
 // ── Banner ────────────────────────────────────────────────────────
 function printBanner() {
+  const safeLabel = config.strategy.safeMode ? chalk.green('ON 🛡️') : chalk.red('OFF ⚡');
   console.log(chalk.cyan(`
 ╔═══════════════════════════════════════════════╗
-║   🤖  PREDICTION MARKET ARB BOT v1.0          ║
-║   Polymarket + Kalshi Arbitrage Scanner       ║
+║   🤖  PREDICTION MARKET BOT v2.0              ║
+║   SAFE MODE — Low Risk, Quick Resolve         ║
 ╠═══════════════════════════════════════════════╣
-║  Strategies:                                  ║
-║    🔥 Cross-Platform Arbitrage                ║
-║    📉 Longshot Bias Exploit                   ║
-║    🐋 Whale Copy Tracker                      ║
-║    🔍 Resolution Edge Detector                ║
+║  Active Strategies:                           ║
+║    🏦 Yield Play (95-99¢, <7 days) (90-95%)  ║
+║    🔥 Arbitrage (risk-free)        (85-95%)  ║
+║    📈 Safe Favorites (85%+ prob)   (55-65%)  ║
+║    📉 Overreaction Fade (HIGH only)(65-75%)  ║
+║    📊 Volume Spike (HIGH only)     (60-70%)  ║
+║    🐋 Whale Copy (HIGH only)       (55-65%)  ║
 ╠═══════════════════════════════════════════════╣
-║  Config:                                      ║
-║    Scan Interval : ${String(config.scanner.intervalSeconds + 's every cycle').padEnd(26)}║
-║    Min Arb Profit: ${String((config.strategy.minArbProfit * 100) + '%').padEnd(26)}║
-║    Min Liquidity : $${String(config.strategy.minLiquidity).padEnd(25)}║
-║    Telegram      : ${config.telegram.enabled ? chalk.green('ENABLED ✅') : chalk.red('DISABLED ❌')}${' '.repeat(config.telegram.enabled ? 17 : 16)}║
+║  Risk Controls:                               ║
+║    Safe Mode    : ${safeLabel}${' '.repeat(24)}║
+║    Bankroll     : $${String(config.strategy.bankroll).padEnd(25)}║
+║    Max Loss/Trade: $${String(config.strategy.bankroll * config.strategy.maxLossPerTrade).padEnd(24)}║
+║    Max Exposure : ${String((config.strategy.maxTotalExposure * 100) + '%').padEnd(26)}║
+║    Scan Interval: ${String(config.scanner.intervalSeconds + 's').padEnd(26)}║
+║    Telegram     : ${config.telegram.enabled ? chalk.green('ENABLED ✅') : chalk.red('DISABLED ❌')}${' '.repeat(config.telegram.enabled ? 18 : 17)}║
 ╚═══════════════════════════════════════════════╝
 `));
 }
+
 
 // ── Graceful Shutdown ─────────────────────────────────────────────
 process.on('SIGINT', () => {

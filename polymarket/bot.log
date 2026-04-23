@@ -5,3 +5,7 @@
 [2026-04-23 11:09:02] [31merror[39m: [Polymarket] Whale fetch error: Request failed with status code 400
 [2026-04-23 11:09:02] [32minfo[39m: [Polymarket] Fetched 704 active markets
 [2026-04-23 11:09:06] [32minfo[39m: [Kalshi] Fetched 1200 active markets
+[2026-04-23 13:00:19] [32minfo[39m: [YieldPlay] Found 1 yield opportunities (VeryLow:1 Low:0 Med:0)
+[2026-04-23 13:04:20] [32minfo[39m: [YieldPlay] Found 2 yield opportunities (VeryLow:1 Low:1 Med:0)
+[2026-04-23 13:04:20] [32minfo[39m: [Longshot] Found 0 overpriced underdogs, 3 underpriced favorites
+[2026-04-23 13:53:55] [32minfo[39m: [ResearchTrade] Found 3 research opportunities (Today: 2)

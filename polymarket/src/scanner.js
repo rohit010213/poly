@@ -6,15 +6,23 @@ const { matchMarkets, detectArbitrage } = require('./strategies/arbitrage');
 const { detectLongshots } = require('./strategies/longshot');
 const { detectWhaleSignals } = require('./strategies/whaleTracker');
 const { detectResolutionEdge } = require('./strategies/resolutionEdge');
+const { detectYieldPlays } = require('./strategies/yieldPlay');
+const { recordMarketSnapshots, detectOverreactionFades } = require('./strategies/overreactionFade');
+const { updateAllBaselines, detectVolumeSpikes } = require('./strategies/volumeSpike');
+const { detectTodayResearchTrades } = require('./strategies/todayResearch');
 const telegram = require('./alerts/telegram');
 const { table } = require('table');
 const chalk = require('chalk');
 
-// ── Dedup sets — persistent (cleared per TTL) ─────────────────────
-const alertedArb = new Map();  // key → expiry timestamp
+// ── Dedup sets ────────────────────────────────────────────────────
+const alertedArb = new Map();
 const alertedLongshot = new Map();
 const alertedWhale = new Map();
-const alertedResEdge = new Map();  // 1 hour TTL
+const alertedResEdge = new Map();
+const alertedYield = new Map();
+const alertedFade = new Map();
+const alertedVolSpike = new Map();
+const alertedResearch = new Map();
 
 function isDuped(map, key, ttl) {
   const expiry = map.get(key);
@@ -27,6 +35,49 @@ function makeArbKey(opp) { return `${opp.poly.id}::${opp.kalshi.ticker}::${opp.p
 function makeLongshotKey(opp) { return `${opp.platform}::${opp.type}::${opp.question?.slice(0, 40)}`; }
 function makeWhaleKey(s) { return `${s.whaleAddress}::${s.marketId}::${s.side}`; }
 function makeResEdgeKey(opp) { return `${opp.platform}::${opp.question?.slice(0, 50)}`; }
+function makeYieldKey(opp) { return `${opp.platform}::${opp.side}::${opp.question?.slice(0, 50)}`; }
+function makeFadeKey(opp) { return `${opp.platform}::${opp.fadeSide}::${opp.question?.slice(0, 50)}`; }
+function makeVolSpikeKey(opp) { return `${opp.platform}::${opp.side}::${opp.question?.slice(0, 50)}`; }
+function makeResearchKey(opp) { return `${opp.platform}::${opp.question?.slice(0, 60)}`; }
+
+// ══════════════════════════════════════════════════════════════════
+//  SAFE MODE FILTERS
+//  Sirf woh trades jo LOW risk hain aur jaldi resolve hoti hain
+// ══════════════════════════════════════════════════════════════════
+
+function filterSafeYield(opps) {
+  if (!config.strategy.safeMode) return opps;
+  // Safe mode: sirf VERY_LOW aur LOW risk, max 7 days
+  return opps.filter(o =>
+    (o.riskLevel === 'VERY_LOW' || o.riskLevel === 'LOW') &&
+    o.daysToResolve <= config.strategy.yieldMaxDays
+  );
+}
+
+function filterSafeLongshots(opps) {
+  if (!config.strategy.safeMode) return opps;
+  // Safe mode: sirf FAVORITE_BUY (85%+ probability = low risk)
+  // Longshot sells are risky, skip them
+  return opps.filter(o => o.type === 'FAVORITE_BUY' && o.edge >= 2);
+}
+
+function filterSafeFades(opps) {
+  if (!config.strategy.safeMode) return opps;
+  // Safe mode: sirf HIGH confidence fades with good R:R
+  return opps.filter(o => o.confidence === 'HIGH' && o.riskRewardRatio >= 2);
+}
+
+function filterSafeVolumeSpikes(opps) {
+  if (!config.strategy.safeMode) return opps;
+  // Safe mode: sirf HIGH confidence volume spikes
+  return opps.filter(o => o.confidence === 'HIGH');
+}
+
+function filterSafeWhales(signals) {
+  if (!config.strategy.safeMode) return signals;
+  // Safe mode: sirf HIGH confidence whale signals
+  return signals.filter(s => s.confidence === 'HIGH');
+}
 
 // ── Console Tables ────────────────────────────────────────────────
 function printArbTable(opps) {
@@ -45,17 +96,18 @@ function printArbTable(opps) {
   console.log(table(rows));
 }
 
-function printLongshotTable(opps) {
+function printYieldTable(opps) {
   if (opps.length === 0) return;
-  console.log(chalk.cyan('\n📉 LONGSHOT / FAVORITE OPPORTUNITIES'));
+  console.log(chalk.green('\n🏦 SAFE YIELD TRADES'));
   const rows = [
-    ['Type', 'Market', 'Price', 'Edge%', 'Action'],
+    ['Market', 'Side', 'Price', 'Return', 'Days', 'Risk'],
     ...opps.slice(0, 5).map(o => [
-      o.type === 'LONGSHOT_SELL' ? chalk.red('OVERPRICED') : chalk.green('FAVORITE'),
-      o.question?.slice(0, 35),
+      o.question?.slice(0, 30),
+      chalk.green(o.side),
       `${(o.marketPrice * 100).toFixed(1)}¢`,
-      chalk.yellow(`+${o.edge}%`),
-      chalk.cyan(o.action),
+      chalk.green(`+${o.returnPct}%`),
+      `${o.daysToResolve}d`,
+      o.riskLevel === 'VERY_LOW' ? chalk.green(o.riskLevel) : chalk.yellow(o.riskLevel),
     ]),
   ];
   console.log(table(rows));
@@ -64,7 +116,8 @@ function printLongshotTable(opps) {
 // ── Main Scan ─────────────────────────────────────────────────────
 async function runScan() {
   const startTime = Date.now();
-  logger.info('━━━ SCAN STARTING ━━━');
+  const safeLabel = config.strategy.safeMode ? '🛡️ SAFE MODE' : '⚡ FULL MODE';
+  logger.info(`━━━ SCAN STARTING [${safeLabel}] ━━━`);
 
   try {
     // Step 1: Fetch data
@@ -74,41 +127,74 @@ async function runScan() {
       polyFetcher.fetchRecentTrades({ minSize: config.strategy.whaleminTradeSize }),
       polyFetcher.fetchLeaderboard({ limit: 25 }),
     ]);
-    logger.info(`[Scanner] Fetched — Poly: ${polyMarkets.length}, Kalshi: ${kalshiMarkets.length}, Whales: ${whaleTrades.length}`);
+    logger.info(`[Scanner] Fetched — Poly: ${polyMarkets.length}, Kalshi: ${kalshiMarkets.length}`);
 
-    // Step 2: Match
-    logger.info('[Scanner] Matching markets...');
+    const allMarkets = [...polyMarkets, ...kalshiMarkets];
+
+    // Step 2: Record snapshots for time-series strategies
+    recordMarketSnapshots(allMarkets);
+    updateAllBaselines(allMarkets);
+
+    // Step 3: Match for arbitrage
     const pairs = matchMarkets(polyMarkets, kalshiMarkets);
 
-    // Step 3: Strategies (sequential)
-    const arbOpps = detectArbitrage(pairs);
-    const longshotOpps = detectLongshots([...polyMarkets, ...kalshiMarkets]);
-    const whaleSignals = detectWhaleSignals(whaleTrades, leaderboard);
-
-    // Resolution edge: sirf high-score wale
-    const allResEdge = detectResolutionEdge([...polyMarkets, ...kalshiMarkets]);
+    // Step 4: Run ALL strategies
+    const arbOppsRaw = detectArbitrage(pairs);
+    const longshotOppsRaw = detectLongshots(allMarkets);
+    const whaleSignalsRaw = detectWhaleSignals(whaleTrades, leaderboard);
+    const allResEdge = detectResolutionEdge(allMarkets);
     const resEdgeOpps = allResEdge.filter(o => o.edgeScore >= config.alerts.minResEdgeScore);
+    const yieldOppsRaw = detectYieldPlays(allMarkets, { bankroll: config.strategy.bankroll });
+    const fadeSignalsRaw = detectOverreactionFades(allMarkets);
+    const volSpikeSignalsRaw = detectVolumeSpikes(allMarkets);
+    const researchOpps = detectTodayResearchTrades(allMarkets);
 
-    // Step 4: Console output
+    // Step 5: SAFE MODE FILTER — sirf low-risk trades
+    const arbOpps = arbOppsRaw; // Arb is already risk-free
+    const yieldOpps = filterSafeYield(yieldOppsRaw);
+    const longshotOpps = filterSafeLongshots(longshotOppsRaw);
+    const fadeSignals = filterSafeFades(fadeSignalsRaw);
+    const volSpikeSignals = filterSafeVolumeSpikes(volSpikeSignalsRaw);
+    const whaleSignals = filterSafeWhales(whaleSignalsRaw);
+
+    const safeTradeCount = arbOpps.length + yieldOpps.length;
+
+    if (config.strategy.safeMode) {
+      logger.info(`[SafeMode] Filtered → Yield: ${yieldOppsRaw.length}→${yieldOpps.length}, Long: ${longshotOppsRaw.length}→${longshotOpps.length}, Fade: ${fadeSignalsRaw.length}→${fadeSignals.length}, Vol: ${volSpikeSignalsRaw.length}→${volSpikeSignals.length}`);
+    }
+
+    // Step 6: Console output
     printArbTable(arbOpps);
-    printLongshotTable(longshotOpps);
-    if (whaleSignals.length > 0) {
-      console.log(chalk.magenta(`\n🐋 WHALE SIGNALS: ${whaleSignals.length}`));
-      whaleSignals.slice(0, 3).forEach(s =>
-        console.log(`  → ${s.whaleAddress?.slice(0, 10)}... ${s.side} $${s.amount} on "${s.question?.slice(0, 40)}"`)
+    printYieldTable(yieldOpps);
+
+    if (longshotOpps.length > 0) {
+      console.log(chalk.cyan(`\n📈 SAFE FAVORITES: ${longshotOpps.length}`));
+      longshotOpps.slice(0, 3).forEach(o =>
+        console.log(`  → ${o.question?.slice(0, 40)} | YES @ ${(o.marketPrice * 100).toFixed(0)}¢ | Edge: +${o.edge}%`)
       );
     }
-    console.log(chalk.blue(`🔍 Resolution Edge (score>=${config.alerts.minResEdgeScore}): ${resEdgeOpps.length} of ${allResEdge.length} total`));
+    if (fadeSignals.length > 0) {
+      console.log(chalk.red(`\n📉 HIGH-CONF FADES: ${fadeSignals.length}`));
+    }
+    if (volSpikeSignals.length > 0) {
+      console.log(chalk.yellow(`\n📊 HIGH-CONF VOLUME: ${volSpikeSignals.length}`));
+    }
 
     const scanDurationMs = Date.now() - startTime;
-    logger.info(`✅ Scan done in ${scanDurationMs}ms | ARB:${arbOpps.length} LONG:${longshotOpps.length} WHALE:${whaleSignals.length} RES:${resEdgeOpps.length}`);
+    logger.info(`✅ Scan done in ${scanDurationMs}ms | SAFE:${safeTradeCount} ARB:${arbOpps.length} YIELD:${yieldOpps.length} RESEARCH:${researchOpps.length} LONG:${longshotOpps.length} FADE:${fadeSignals.length} VOL:${volSpikeSignals.length}`);
 
-    // Step 5: Telegram alerts (DEDUPLICATED)
-
-    // Track kitne actual NEW alerts bheje is scan mein
+    // Step 7: Telegram alerts (DEDUPLICATED)
     let newAlertsSentThisScan = 0;
 
-    // Arb alerts — 10 min dedup
+    // 🏦 Yield plays — TOP PRIORITY (safe, quick resolve)
+    for (const opp of yieldOpps.slice(0, 3)) {
+      if (!isDuped(alertedYield, makeYieldKey(opp), config.alerts.yieldDedupTTL)) {
+        await telegram.alertYieldPlay(opp);
+        newAlertsSentThisScan++;
+      }
+    }
+
+    // 🔥 Arb alerts (risk-free)
     for (const opp of arbOpps) {
       if (!isDuped(alertedArb, makeArbKey(opp), config.alerts.mainDedupTTL)) {
         await telegram.alertArbitrage(opp);
@@ -116,23 +202,47 @@ async function runScan() {
       }
     }
 
-    // Longshot — top 3 only, 10 min dedup
-    for (const opp of longshotOpps.slice(0, 3)) {
+    // 📈 Safe favorites only (high probability)
+    for (const opp of longshotOpps.slice(0, 2)) {
       if (!isDuped(alertedLongshot, makeLongshotKey(opp), config.alerts.mainDedupTTL)) {
         await telegram.alertLongshot(opp);
         newAlertsSentThisScan++;
       }
     }
 
-    // Whale — HIGH confidence only, 10 min dedup
-    for (const signal of whaleSignals.filter(s => s.confidence === 'HIGH')) {
+    // 🐋 Whale signals (HIGH only in safe mode)
+    for (const signal of whaleSignals.slice(0, 1)) {
       if (!isDuped(alertedWhale, makeWhaleKey(signal), config.alerts.mainDedupTTL)) {
         await telegram.alertWhale(signal);
         newAlertsSentThisScan++;
       }
     }
 
-    // Resolution edge — max 1 per scan, 1 HOUR dedup
+    // 📉 Fade (HIGH confidence only in safe mode)
+    for (const signal of fadeSignals.slice(0, 1)) {
+      if (!isDuped(alertedFade, makeFadeKey(signal), config.alerts.fadeDedupTTL)) {
+        await telegram.alertFade(signal);
+        newAlertsSentThisScan++;
+      }
+    }
+
+    // 📊 Volume spike (HIGH confidence only in safe mode)
+    for (const signal of volSpikeSignals.slice(0, 1)) {
+      if (!isDuped(alertedVolSpike, makeVolSpikeKey(signal), config.alerts.volumeSpikeDedupTTL)) {
+        await telegram.alertVolumeSpike(signal);
+        newAlertsSentThisScan++;
+      }
+    }
+
+    // 🔬 Research trades — top 2, 1 hour dedup
+    for (const opp of researchOpps.slice(0, 2)) {
+      if (!isDuped(alertedResearch, makeResearchKey(opp), config.alerts.researchDedupTTL)) {
+        await telegram.alertResearchTrade(opp);
+        newAlertsSentThisScan++;
+      }
+    }
+
+    // Resolution edge — max 1 per scan
     let resAlertsSent = 0;
     for (const opp of resEdgeOpps) {
       if (resAlertsSent >= config.alerts.maxResEdgeAlertsPerScan) break;
@@ -144,10 +254,7 @@ async function runScan() {
     }
 
     // ── Scan Summary ─────────────────────────────────────────
-    // Sirf tab bhejo jab:
-    // 1. Is scan mein koi NEW alert bheja gaya ho
-    // 2. Ya har 1 ghante mein ek baar (heartbeat — bot alive hai)
-    const SUMMARY_HEARTBEAT_TTL = 60 * 60 * 1000; // 1 hour
+    const SUMMARY_HEARTBEAT_TTL = 60 * 60 * 1000;
     const shouldSendSummary = newAlertsSentThisScan > 0 ||
       !isDuped(alertedResEdge, '__HEARTBEAT__', SUMMARY_HEARTBEAT_TTL);
 
@@ -157,16 +264,21 @@ async function runScan() {
         longshotCount: longshotOpps.length,
         whaleCount: whaleSignals.length,
         resEdgeCount: resEdgeOpps.length,
+        yieldCount: yieldOpps.length,
+        fadeCount: fadeSignals.length,
+        volSpikeCount: volSpikeSignals.length,
+        researchCount: researchOpps.length,
+        safeTradeCount,
         newAlerts: newAlertsSentThisScan,
         scanDurationMs,
       });
     }
 
-    return { arbOpps, longshotOpps, whaleSignals, resEdgeOpps };
+    return { arbOpps, longshotOpps, whaleSignals, resEdgeOpps, yieldOpps, fadeSignals, volSpikeSignals, researchOpps };
   } catch (err) {
     logger.error(`[Scanner] Fatal: ${err.message}`);
     logger.error(err.stack);
-    return { arbOpps: [], longshotOpps: [], whaleSignals: [], resEdgeOpps: [] };
+    return { arbOpps: [], longshotOpps: [], whaleSignals: [], resEdgeOpps: [], yieldOpps: [], fadeSignals: [], volSpikeSignals: [], researchOpps: [] };
   }
 }
 
