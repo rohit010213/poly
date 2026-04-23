@@ -179,6 +179,12 @@ async function runScan() {
     if (volSpikeSignals.length > 0) {
       console.log(chalk.yellow(`\n📊 HIGH-CONF VOLUME: ${volSpikeSignals.length}`));
     }
+    if (researchOpps.length > 0) {
+      console.log(chalk.magenta(`\n🔬 RESEARCH TRADES: ${researchOpps.length}`));
+      researchOpps.slice(0, 5).forEach(o =>
+        console.log(`  → ${o.categoryEmoji} ${o.resolveLabel} | ${o.question?.slice(0, 40)} | YES:${(o.yesPrice*100).toFixed(0)}¢ NO:${(o.noPrice*100).toFixed(0)}¢ | Score:${o.researchScore}`)
+      );
+    }
 
     const scanDurationMs = Date.now() - startTime;
     logger.info(`✅ Scan done in ${scanDurationMs}ms | SAFE:${safeTradeCount} ARB:${arbOpps.length} YIELD:${yieldOpps.length} RESEARCH:${researchOpps.length} LONG:${longshotOpps.length} FADE:${fadeSignals.length} VOL:${volSpikeSignals.length}`);
@@ -234,8 +240,8 @@ async function runScan() {
       }
     }
 
-    // 🔬 Research trades — top 2, 1 hour dedup
-    for (const opp of researchOpps.slice(0, 2)) {
+    // 🔬 Research trades — top 3, 1 hour dedup
+    for (const opp of researchOpps.slice(0, 3)) {
       if (!isDuped(alertedResearch, makeResearchKey(opp), config.alerts.researchDedupTTL)) {
         await telegram.alertResearchTrade(opp);
         newAlertsSentThisScan++;

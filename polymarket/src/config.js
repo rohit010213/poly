@@ -53,8 +53,8 @@ const config = {
     safeMode: process.env.SAFE_MODE !== 'false',  // ON by default
 
     // ── Research Trade (Top Trader Strategy) ──────────────────
-    researchMaxHours: parseFloat(process.env.RESEARCH_MAX_HOURS) || 48,  // Max 48h to resolve
-    researchMinScore: parseFloat(process.env.RESEARCH_MIN_SCORE) || 4,   // Min research potential
+    researchMaxHours: parseFloat(process.env.RESEARCH_MAX_HOURS) || 168, // 7 days (matches Polymarket weekly cycle)
+    researchMinScore: parseFloat(process.env.RESEARCH_MIN_SCORE) || 3,   // Min research potential
   },
   scanner: {
     intervalSeconds: parseInt(process.env.SCAN_INTERVAL_SECONDS) || 30,

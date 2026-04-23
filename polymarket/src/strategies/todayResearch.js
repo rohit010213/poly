@@ -103,9 +103,11 @@ function assessResearchPotential(market, hoursLeft) {
   else score += 1;
 
   // Closing SOONER = more actionable
-  if (hoursLeft <= 6) score += 3;      // Today!
-  else if (hoursLeft <= 24) score += 2; // Tomorrow
-  else if (hoursLeft <= 48) score += 1;
+  if (hoursLeft <= 6) score += 3;        // Today!
+  else if (hoursLeft <= 24) score += 3;  // Tomorrow
+  else if (hoursLeft <= 48) score += 2;  // 2 days
+  else if (hoursLeft <= 72) score += 1;  // 3 days
+  else if (hoursLeft <= 168) score += 1; // Up to 7 days
 
   // Higher volume = more reliable pricing (but also more efficient)
   const vol = parseFloat(market.volume || 0);
@@ -135,11 +137,11 @@ function detectTodayResearchTrades(markets) {
     if (!yesPrice || !noPrice) continue;
 
     const hours = hoursUntilResolve(market.endDate);
-    // Only markets resolving within maxResearchHours (default 48h)
-    if (hours > (config.strategy.researchMaxHours || 48) || hours <= 0) continue;
+    // Only markets resolving within maxResearchHours (default 168h = 7 days)
+    if (hours > (config.strategy.researchMaxHours || 168) || hours <= 0) continue;
 
     // Skip near-certainty markets — no research edge there
-    if (yesPrice > 0.95 || yesPrice < 0.05) continue;
+    if (yesPrice > 0.92 || yesPrice < 0.08) continue;
 
     // Need decent liquidity
     const liq = parseFloat(market.liquidity || 0);
@@ -150,8 +152,8 @@ function detectTodayResearchTrades(markets) {
     const researchLinks = generateResearchLinks(market.question, category, market.url);
     const researchScore = assessResearchPotential(market, hours);
 
-    // Only show decent research potential (score >= 4)
-    if (researchScore < (config.strategy.researchMinScore || 4)) continue;
+    // Only show decent research potential (score >= 3)
+    if (researchScore < (config.strategy.researchMinScore || 3)) continue;
 
     // Determine which side might have edge based on price position
     let suggestedResearch;
