@@ -101,22 +101,26 @@ async function runScan() {
     console.log(chalk.blue(`🔍 Resolution Edge (score>=${config.alerts.minResEdgeScore}): ${resEdgeOpps.length} of ${allResEdge.length} total`));
 
     const scanDurationMs = Date.now() - startTime;
-    const totalOpps = arbOpps.length + longshotOpps.length + whaleSignals.length + resEdgeOpps.length;
     logger.info(`✅ Scan done in ${scanDurationMs}ms | ARB:${arbOpps.length} LONG:${longshotOpps.length} WHALE:${whaleSignals.length} RES:${resEdgeOpps.length}`);
 
     // Step 5: Telegram alerts (DEDUPLICATED)
+
+    // Track kitne actual NEW alerts bheje is scan mein
+    let newAlertsSentThisScan = 0;
 
     // Arb alerts — 10 min dedup
     for (const opp of arbOpps) {
       if (!isDuped(alertedArb, makeArbKey(opp), config.alerts.mainDedupTTL)) {
         await telegram.alertArbitrage(opp);
+        newAlertsSentThisScan++;
       }
     }
 
-    // Longshot — top 3, 10 min dedup
+    // Longshot — top 3 only, 10 min dedup
     for (const opp of longshotOpps.slice(0, 3)) {
       if (!isDuped(alertedLongshot, makeLongshotKey(opp), config.alerts.mainDedupTTL)) {
         await telegram.alertLongshot(opp);
+        newAlertsSentThisScan++;
       }
     }
 
@@ -124,26 +128,36 @@ async function runScan() {
     for (const signal of whaleSignals.filter(s => s.confidence === 'HIGH')) {
       if (!isDuped(alertedWhale, makeWhaleKey(signal), config.alerts.mainDedupTTL)) {
         await telegram.alertWhale(signal);
+        newAlertsSentThisScan++;
       }
     }
 
-    // Resolution edge — max 1 per scan, 1 HOUR dedup (no spam!)
+    // Resolution edge — max 1 per scan, 1 HOUR dedup
     let resAlertsSent = 0;
     for (const opp of resEdgeOpps) {
       if (resAlertsSent >= config.alerts.maxResEdgeAlertsPerScan) break;
       if (!isDuped(alertedResEdge, makeResEdgeKey(opp), config.alerts.resEdgeDedupTTL)) {
         await telegram.alertResolutionEdge(opp);
         resAlertsSent++;
+        newAlertsSentThisScan++;
       }
     }
 
-    // Scan summary — SIRF jab koi opportunity mili ho
-    if (!config.alerts.summaryOnlyWhenOpportunity || totalOpps > 0) {
+    // ── Scan Summary ─────────────────────────────────────────
+    // Sirf tab bhejo jab:
+    // 1. Is scan mein koi NEW alert bheja gaya ho
+    // 2. Ya har 1 ghante mein ek baar (heartbeat — bot alive hai)
+    const SUMMARY_HEARTBEAT_TTL = 60 * 60 * 1000; // 1 hour
+    const shouldSendSummary = newAlertsSentThisScan > 0 ||
+      !isDuped(alertedResEdge, '__HEARTBEAT__', SUMMARY_HEARTBEAT_TTL);
+
+    if (shouldSendSummary) {
       await telegram.alertScanSummary({
         arbCount: arbOpps.length,
         longshotCount: longshotOpps.length,
         whaleCount: whaleSignals.length,
         resEdgeCount: resEdgeOpps.length,
+        newAlerts: newAlertsSentThisScan,
         scanDurationMs,
       });
     }

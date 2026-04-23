@@ -1,6 +1,6 @@
 const TelegramBot = require('node-telegram-bot-api');
-const config      = require('../config');
-const logger      = require('../utils/logger');
+const config = require('../config');
+const logger = require('../utils/logger');
 
 let bot = null;
 
@@ -71,9 +71,9 @@ ${emoji} *${opp.type === 'LONGSHOT_SELL' ? 'OVERPRICED UNDERDOG' : 'UNDERPRICED 
 
 💡 *Why:* ${opp.reasoning}
 
-${opp.type === 'FAVORITE_BUY' 
-  ? `💰 Expected Return: +$${opp.expectedReturn} (+${opp.returnPct}%)`
-  : `💰 EV: ${opp.ev}%`}
+${opp.type === 'FAVORITE_BUY'
+      ? `💰 Expected Return: +$${opp.expectedReturn} (+${opp.returnPct}%)`
+      : `💰 EV: ${opp.ev}%`}
 
 [Open Market](${opp.url})
 ⏰ ${new Date().toLocaleTimeString()}
@@ -122,16 +122,17 @@ ${patterns}
   await send(msg);
 }
 
-async function alertScanSummary({ arbCount, longshotCount, whaleCount, resEdgeCount, scanDurationMs }) {
+async function alertScanSummary({ arbCount, longshotCount, whaleCount, resEdgeCount, newAlerts = 0, scanDurationMs }) {
+  const hasOpps = arbCount + longshotCount + whaleCount + resEdgeCount > 0;
   const msg = `
-📊 *SCAN COMPLETE* — ${new Date().toLocaleTimeString()}
+📊 *${newAlerts > 0 ? `NEW ALERTS (${newAlerts})` : 'BOT ALIVE — Hourly Update'}*
 ━━━━━━━━━━━━━━━━━━━━
-🔥 Arbitrage Opps:    *${arbCount}*
-📉 Longshot Signals:  *${longshotCount}*
-🐋 Whale Signals:     *${whaleCount}*
-🔍 Resolution Edges:  *${resEdgeCount}*
+🔥 Arbitrage:     *${arbCount}*
+📉 Longshot:      *${longshotCount}*
+🐋 Whale:         *${whaleCount}*
+🔍 Res. Edge:     *${resEdgeCount}*
 ━━━━━━━━━━━━━━━━━━━━
-⏱ Scan time: ${scanDurationMs}ms
+⏱ ${scanDurationMs}ms | ${new Date().toLocaleTimeString()}
 `;
   await send(msg);
 }
