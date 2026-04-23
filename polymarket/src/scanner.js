@@ -150,40 +150,34 @@ async function runScan() {
     const researchOpps = detectTodayResearchTrades(allMarkets);
 
     // Step 5: SAFE MODE FILTER — sirf low-risk trades aur JALDI resolve hone wale
-    const MAX_DAYS = 7; 
-    const isQuickResolve = (o) => {
-      if (!o.endDate) return false; // Agar date nahi hai toh risky hai, skip karo
+    const isQuickResolve = (o, maxDays = 7) => {
+      if (!o.endDate) return false; 
       
       const resolveDate = new Date(o.endDate);
       const now = new Date();
       const days = (resolveDate - now) / (1000 * 60 * 60 * 24);
       
-      // 1. Check if resolve date is within 7 days
-      if (days > MAX_DAYS || days < -1) return false;
+      if (days > maxDays || days < -1) return false;
 
-      // 2. Extra safety: Check if question mentions far-off years
       const q = (o.question || '').toLowerCase();
       const currentYear = now.getFullYear();
-      const farYears = [currentYear + 1, currentYear + 2, '2026', '2027', '2028', '2029', '2030'];
+      const farYears = [currentYear + 2, '2027', '2028', '2029', '2030'];
       
       for (const year of farYears) {
-        if (q.includes(year.toString())) {
-          // Agar question mein "2026" hai par endDate "aaj" ki hai, 
-          // toh matlab result late aayega. Skip it!
-          return false;
-        }
+        if (q.includes(year.toString())) return false;
       }
-
       return true;
     };
 
-    const arbOpps = arbOppsRaw.filter(isQuickResolve);
-    const yieldOpps = filterSafeYield(yieldOppsRaw).filter(isQuickResolve);
-    const longshotOpps = filterSafeLongshots(longshotOppsRaw).filter(isQuickResolve);
-    const fadeSignals = filterSafeFades(fadeSignalsRaw).filter(isQuickResolve);
-    const volSpikeSignals = filterSafeVolumeSpikes(volSpikeSignalsRaw).filter(isQuickResolve);
-    const whaleSignals = filterSafeWhales(whaleSignalsRaw).filter(isQuickResolve);
-    const filteredResearch = researchOpps.filter(isQuickResolve);
+    const arbOpps = arbOppsRaw.filter(o => isQuickResolve(o, 7));
+    const yieldOpps = filterSafeYield(yieldOppsRaw).filter(o => isQuickResolve(o, 7));
+    const longshotOpps = filterSafeLongshots(longshotOppsRaw).filter(o => isQuickResolve(o, 7));
+    const fadeSignals = filterSafeFades(fadeSignalsRaw).filter(o => isQuickResolve(o, 7));
+    const volSpikeSignals = filterSafeVolumeSpikes(volSpikeSignalsRaw).filter(o => isQuickResolve(o, 7));
+    const whaleSignals = filterSafeWhales(whaleSignalsRaw).filter(o => isQuickResolve(o, 7));
+    
+    // Research trades ko 14 din tak allow karna hai
+    const filteredResearch = researchOpps.filter(o => isQuickResolve(o, 14));
 
     const safeTradeCount = arbOpps.length + yieldOpps.length;
 

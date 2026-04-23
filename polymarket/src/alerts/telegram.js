@@ -349,10 +349,10 @@ async function alertResearchTrade(opp) {
   const sr = opp.suggestedResearch || {};
 
   const msg = `
-🔬 *RESEARCH TRADE* ${opp.categoryEmoji} ${opp.category} ${opp.resolveLabel}
+🔬 *SAFE RESEARCH TRADE* ${opp.categoryEmoji} ${opp.category}
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
-📂 *SECTION:* 🔬 **RESEARCH TRADE** (Information Edge)
+📂 *SECTION:* 🔬 **SAFE RESEARCH TRADE** (14-Day Info Edge)
 📋 *Market:* ${opp.question?.slice(0, 100)}
 
 ━━━ *ABHI KYA HAI:* ━━━

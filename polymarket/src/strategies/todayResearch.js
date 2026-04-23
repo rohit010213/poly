@@ -137,8 +137,8 @@ function detectTodayResearchTrades(markets) {
     if (!yesPrice || !noPrice) continue;
 
     const hours = hoursUntilResolve(market.endDate);
-    // Only markets resolving within maxResearchHours (default 168h = 7 days)
-    if (hours > (config.strategy.researchMaxHours || 168) || hours <= 0) continue;
+    // Only markets resolving within maxResearchHours (default 336h = 14 days)
+    if (hours > (config.strategy.researchMaxHours || 336) || hours <= 0) continue;
 
     // Skip near-certainty markets — no research edge there
     if (yesPrice > 0.92 || yesPrice < 0.08) continue;
