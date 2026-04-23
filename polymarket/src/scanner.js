@@ -10,37 +10,34 @@ const telegram = require('./alerts/telegram');
 const { table } = require('table');
 const chalk = require('chalk');
 
-// ── Track already-alerted opportunities to avoid spam ────────────
-const alertedArb = new Set();
-const alertedLongshot = new Set();
-const alertedWhale = new Set();
-const DEDUP_TTL_MS = 10 * 60 * 1000;  // 10 minutes
+// ── Dedup sets — persistent (cleared per TTL) ─────────────────────
+const alertedArb = new Map();  // key → expiry timestamp
+const alertedLongshot = new Map();
+const alertedWhale = new Map();
+const alertedResEdge = new Map();  // 1 hour TTL
 
-function makeArbKey(opp) {
-  return `${opp.poly.id}::${opp.kalshi.ticker}::${opp.poly.side}`;
+function isDuped(map, key, ttl) {
+  const expiry = map.get(key);
+  if (expiry && Date.now() < expiry) return true;
+  map.set(key, Date.now() + ttl);
+  return false;
 }
 
-function makeLongshotKey(opp) {
-  return `${opp.platform}::${opp.question?.slice(0, 40)}::${opp.type}`;
-}
+function makeArbKey(opp) { return `${opp.poly.id}::${opp.kalshi.ticker}::${opp.poly.side}`; }
+function makeLongshotKey(opp) { return `${opp.platform}::${opp.type}::${opp.question?.slice(0, 40)}`; }
+function makeWhaleKey(s) { return `${s.whaleAddress}::${s.marketId}::${s.side}`; }
+function makeResEdgeKey(opp) { return `${opp.platform}::${opp.question?.slice(0, 50)}`; }
 
-function makeWhaleKey(s) {
-  return `${s.whaleAddress}::${s.marketId}::${s.side}`;
-}
-
-// ── Console Table Rendering ───────────────────────────────────────
-
+// ── Console Tables ────────────────────────────────────────────────
 function printArbTable(opps) {
   if (opps.length === 0) return;
   console.log(chalk.yellow('\n🔥 ARBITRAGE OPPORTUNITIES'));
   const rows = [
-    ['Market', 'Poly Side', 'Poly ¢', 'Kalshi Side', 'Kalshi ¢', 'Profit%', 'Exp $'],
+    ['Market', 'Poly', 'Kalshi', 'Profit%', 'Exp $'],
     ...opps.slice(0, 5).map(o => [
-      o.question?.slice(0, 35) + '...',
-      chalk.green(o.poly.side),
-      (o.poly.price * 100).toFixed(1),
-      chalk.green(o.kalshi.side),
-      (o.kalshi.price * 100).toFixed(1),
+      o.question?.slice(0, 38),
+      `${o.poly.side} @${(o.poly.price * 100).toFixed(0)}¢`,
+      `${o.kalshi.side} @${(o.kalshi.price * 100).toFixed(0)}¢`,
       chalk.yellow(`+${o.profitPct}%`),
       chalk.green(`$${o.expectedProfit}`),
     ]),
@@ -52,12 +49,11 @@ function printLongshotTable(opps) {
   if (opps.length === 0) return;
   console.log(chalk.cyan('\n📉 LONGSHOT / FAVORITE OPPORTUNITIES'));
   const rows = [
-    ['Type', 'Market', 'Price', 'Fair Val', 'Edge%', 'Action'],
+    ['Type', 'Market', 'Price', 'Edge%', 'Action'],
     ...opps.slice(0, 5).map(o => [
-      o.type === 'LONGSHOT_SELL' ? chalk.red('OVERPRICED') : chalk.green('UNDERPRICED'),
-      o.question?.slice(0, 30) + '...',
+      o.type === 'LONGSHOT_SELL' ? chalk.red('OVERPRICED') : chalk.green('FAVORITE'),
+      o.question?.slice(0, 35),
       `${(o.marketPrice * 100).toFixed(1)}¢`,
-      `${(o.fairValue * 100).toFixed(1)}¢`,
       chalk.yellow(`+${o.edge}%`),
       chalk.cyan(o.action),
     ]),
@@ -65,110 +61,96 @@ function printLongshotTable(opps) {
   console.log(table(rows));
 }
 
-// ── Main Scan Function ────────────────────────────────────────────
-
+// ── Main Scan ─────────────────────────────────────────────────────
 async function runScan() {
   const startTime = Date.now();
-  logger.info(chalk.bgBlue.white('\n━━━ SCAN STARTING ━━━'));
+  logger.info('━━━ SCAN STARTING ━━━');
 
   try {
-    // 1. Fetch markets in parallel
+    // Step 1: Fetch data
     const [polyMarkets, kalshiMarkets, whaleTrades, leaderboard] = await Promise.all([
       polyFetcher.fetchMarkets(),
       kalshiFetcher.fetchMarkets(),
       polyFetcher.fetchRecentTrades({ minSize: config.strategy.whaleminTradeSize }),
       polyFetcher.fetchLeaderboard({ limit: 25 }),
     ]);
+    logger.info(`[Scanner] Fetched — Poly: ${polyMarkets.length}, Kalshi: ${kalshiMarkets.length}, Whales: ${whaleTrades.length}`);
 
-    logger.info(`[Scanner] Step 1 done — Poly: ${polyMarkets.length}, Kalshi: ${kalshiMarkets.length}, Whales: ${whaleTrades.length}`);
-
-    // 2. Match markets across platforms (now fast with keyword index)
-    logger.info(`[Scanner] Step 2 — Matching markets...`);
+    // Step 2: Match
+    logger.info('[Scanner] Matching markets...');
     const pairs = matchMarkets(polyMarkets, kalshiMarkets);
 
-    // 3. Run strategies sequentially (avoid simultaneous CPU spike)
-    logger.info(`[Scanner] Step 3 — Running arbitrage strategy...`);
+    // Step 3: Strategies (sequential)
     const arbOpps = detectArbitrage(pairs);
-
-    logger.info(`[Scanner] Step 4 — Running longshot strategy...`);
     const longshotOpps = detectLongshots([...polyMarkets, ...kalshiMarkets]);
-
-    logger.info(`[Scanner] Step 5 — Running whale tracker...`);
     const whaleSignals = detectWhaleSignals(whaleTrades, leaderboard);
 
-    logger.info(`[Scanner] Step 6 — Running resolution edge strategy...`);
-    const resEdgeOpps = detectResolutionEdge([...polyMarkets, ...kalshiMarkets]);
+    // Resolution edge: sirf high-score wale
+    const allResEdge = detectResolutionEdge([...polyMarkets, ...kalshiMarkets]);
+    const resEdgeOpps = allResEdge.filter(o => o.edgeScore >= config.alerts.minResEdgeScore);
 
-    logger.info(`[Scanner] Step 7 — Sending alerts...`);
-
-    // 4. Print to console
+    // Step 4: Console output
     printArbTable(arbOpps);
     printLongshotTable(longshotOpps);
-
     if (whaleSignals.length > 0) {
-      console.log(chalk.magenta(`\n🐋 WHALE SIGNALS: ${whaleSignals.length} detected`));
-      whaleSignals.slice(0, 3).forEach(s => {
-        console.log(`  → ${s.whaleAddress?.slice(0, 10)}... bought ${s.side} $${s.amount} on "${s.question?.slice(0, 40)}"`);
-      });
+      console.log(chalk.magenta(`\n🐋 WHALE SIGNALS: ${whaleSignals.length}`));
+      whaleSignals.slice(0, 3).forEach(s =>
+        console.log(`  → ${s.whaleAddress?.slice(0, 10)}... ${s.side} $${s.amount} on "${s.question?.slice(0, 40)}"`)
+      );
     }
+    console.log(chalk.blue(`🔍 Resolution Edge (score>=${config.alerts.minResEdgeScore}): ${resEdgeOpps.length} of ${allResEdge.length} total`));
 
-    if (resEdgeOpps.length > 0) {
-      console.log(chalk.blue(`\n🔍 RESOLUTION EDGE: ${resEdgeOpps.length} markets`));
-    }
+    const scanDurationMs = Date.now() - startTime;
+    const totalOpps = arbOpps.length + longshotOpps.length + whaleSignals.length + resEdgeOpps.length;
+    logger.info(`✅ Scan done in ${scanDurationMs}ms | ARB:${arbOpps.length} LONG:${longshotOpps.length} WHALE:${whaleSignals.length} RES:${resEdgeOpps.length}`);
 
-    // 5. Send Telegram alerts (deduplicated)
+    // Step 5: Telegram alerts (DEDUPLICATED)
+
+    // Arb alerts — 10 min dedup
     for (const opp of arbOpps) {
-      const key = makeArbKey(opp);
-      if (!alertedArb.has(key)) {
-        alertedArb.add(key);
-        setTimeout(() => alertedArb.delete(key), DEDUP_TTL_MS);
+      if (!isDuped(alertedArb, makeArbKey(opp), config.alerts.mainDedupTTL)) {
         await telegram.alertArbitrage(opp);
       }
     }
 
-    // Top 3 longshot opps only
+    // Longshot — top 3, 10 min dedup
     for (const opp of longshotOpps.slice(0, 3)) {
-      const key = makeLongshotKey(opp);
-      if (!alertedLongshot.has(key)) {
-        alertedLongshot.add(key);
-        setTimeout(() => alertedLongshot.delete(key), DEDUP_TTL_MS);
+      if (!isDuped(alertedLongshot, makeLongshotKey(opp), config.alerts.mainDedupTTL)) {
         await telegram.alertLongshot(opp);
       }
     }
 
-    // High-confidence whale signals only
+    // Whale — HIGH confidence only, 10 min dedup
     for (const signal of whaleSignals.filter(s => s.confidence === 'HIGH')) {
-      const key = makeWhaleKey(signal);
-      if (!alertedWhale.has(key)) {
-        alertedWhale.add(key);
-        setTimeout(() => alertedWhale.delete(key), DEDUP_TTL_MS);
+      if (!isDuped(alertedWhale, makeWhaleKey(signal), config.alerts.mainDedupTTL)) {
         await telegram.alertWhale(signal);
       }
     }
 
-    // Top resolution edge opp
-    if (resEdgeOpps.length > 0) {
-      await telegram.alertResolutionEdge(resEdgeOpps[0]);
+    // Resolution edge — max 1 per scan, 1 HOUR dedup (no spam!)
+    let resAlertsSent = 0;
+    for (const opp of resEdgeOpps) {
+      if (resAlertsSent >= config.alerts.maxResEdgeAlertsPerScan) break;
+      if (!isDuped(alertedResEdge, makeResEdgeKey(opp), config.alerts.resEdgeDedupTTL)) {
+        await telegram.alertResolutionEdge(opp);
+        resAlertsSent++;
+      }
     }
 
-    const scanDurationMs = Date.now() - startTime;
-
-    // 6. Summary
-    logger.info(chalk.green(`\n✅ Scan complete in ${scanDurationMs}ms`));
-    logger.info(`   ARB: ${arbOpps.length} | Longshot: ${longshotOpps.length} | Whale: ${whaleSignals.length} | ResEdge: ${resEdgeOpps.length}`);
-
-    // Telegram summary every scan
-    await telegram.alertScanSummary({
-      arbCount: arbOpps.length,
-      longshotCount: longshotOpps.length,
-      whaleCount: whaleSignals.length,
-      resEdgeCount: resEdgeOpps.length,
-      scanDurationMs,
-    });
+    // Scan summary — SIRF jab koi opportunity mili ho
+    if (!config.alerts.summaryOnlyWhenOpportunity || totalOpps > 0) {
+      await telegram.alertScanSummary({
+        arbCount: arbOpps.length,
+        longshotCount: longshotOpps.length,
+        whaleCount: whaleSignals.length,
+        resEdgeCount: resEdgeOpps.length,
+        scanDurationMs,
+      });
+    }
 
     return { arbOpps, longshotOpps, whaleSignals, resEdgeOpps };
   } catch (err) {
-    logger.error(`[Scanner] Fatal error: ${err.message}`);
+    logger.error(`[Scanner] Fatal: ${err.message}`);
     logger.error(err.stack);
     return { arbOpps: [], longshotOpps: [], whaleSignals: [], resEdgeOpps: [] };
   }
