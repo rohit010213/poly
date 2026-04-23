@@ -1,0 +1,7 @@
+[2026-04-23 11:09:01] [32minfo[39m: 🚀 Running initial scan...
+[2026-04-23 11:09:01] [32minfo[39m: [44m[37m[39m[49m
+[44m[37m━━━ SCAN STARTING ━━━[39m[49m
+[2026-04-23 11:09:02] [31merror[39m: [Polymarket] Leaderboard fetch error: Request failed with status code 404
+[2026-04-23 11:09:02] [31merror[39m: [Polymarket] Whale fetch error: Request failed with status code 400
+[2026-04-23 11:09:02] [32minfo[39m: [Polymarket] Fetched 704 active markets
+[2026-04-23 11:09:06] [32minfo[39m: [Kalshi] Fetched 1200 active markets
