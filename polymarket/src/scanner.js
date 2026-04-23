@@ -150,11 +150,31 @@ async function runScan() {
     const researchOpps = detectTodayResearchTrades(allMarkets);
 
     // Step 5: SAFE MODE FILTER — sirf low-risk trades aur JALDI resolve hone wale
-    const MAX_DAYS = 7; // HARD LIMIT: 1 hafte se zyada wali trades skip
+    const MAX_DAYS = 7; 
     const isQuickResolve = (o) => {
-      if (!o.endDate) return true; 
-      const days = (new Date(o.endDate) - new Date()) / (1000 * 60 * 60 * 24);
-      return days <= MAX_DAYS;
+      if (!o.endDate) return false; // Agar date nahi hai toh risky hai, skip karo
+      
+      const resolveDate = new Date(o.endDate);
+      const now = new Date();
+      const days = (resolveDate - now) / (1000 * 60 * 60 * 24);
+      
+      // 1. Check if resolve date is within 7 days
+      if (days > MAX_DAYS || days < -1) return false;
+
+      // 2. Extra safety: Check if question mentions far-off years
+      const q = (o.question || '').toLowerCase();
+      const currentYear = now.getFullYear();
+      const farYears = [currentYear + 1, currentYear + 2, '2026', '2027', '2028', '2029', '2030'];
+      
+      for (const year of farYears) {
+        if (q.includes(year.toString())) {
+          // Agar question mein "2026" hai par endDate "aaj" ki hai, 
+          // toh matlab result late aayega. Skip it!
+          return false;
+        }
+      }
+
+      return true;
     };
 
     const arbOpps = arbOppsRaw.filter(isQuickResolve);

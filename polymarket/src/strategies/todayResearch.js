@@ -137,8 +137,8 @@ function detectTodayResearchTrades(markets) {
     if (!yesPrice || !noPrice) continue;
 
     const hours = hoursUntilResolve(market.endDate);
-    // Only markets resolving within maxResearchHours (default 30 days for testing)
-    if (hours > (config.strategy.researchMaxHours || 720) || (hours < -24)) continue;
+    // Only markets resolving within maxResearchHours (default 168h = 7 days)
+    if (hours > (config.strategy.researchMaxHours || 168) || hours <= 0) continue;
 
     // Skip near-certainty markets — no research edge there
     if (yesPrice > 0.92 || yesPrice < 0.08) continue;
@@ -152,8 +152,8 @@ function detectTodayResearchTrades(markets) {
     const researchLinks = generateResearchLinks(market.question, category, market.url);
     const researchScore = assessResearchPotential(market, hours);
 
-    // Only show decent research potential (score >= 2)
-    if (researchScore < (config.strategy.researchMinScore || 2)) continue;
+    // Only show decent research potential (score >= 3)
+    if (researchScore < (config.strategy.researchMinScore || 3)) continue;
 
     // Determine which side might have edge based on price position
     let suggestedResearch;
