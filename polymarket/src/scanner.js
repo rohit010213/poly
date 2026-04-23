@@ -149,18 +149,26 @@ async function runScan() {
     const volSpikeSignalsRaw = detectVolumeSpikes(allMarkets);
     const researchOpps = detectTodayResearchTrades(allMarkets);
 
-    // Step 5: SAFE MODE FILTER — sirf low-risk trades
-    const arbOpps = arbOppsRaw; // Arb is already risk-free
-    const yieldOpps = filterSafeYield(yieldOppsRaw);
-    const longshotOpps = filterSafeLongshots(longshotOppsRaw);
-    const fadeSignals = filterSafeFades(fadeSignalsRaw);
-    const volSpikeSignals = filterSafeVolumeSpikes(volSpikeSignalsRaw);
-    const whaleSignals = filterSafeWhales(whaleSignalsRaw);
+    // Step 5: SAFE MODE FILTER — sirf low-risk trades aur JALDI resolve hone wale
+    const MAX_DAYS = 7; // HARD LIMIT: 1 hafte se zyada wali trades skip
+    const isQuickResolve = (o) => {
+      if (!o.endDate) return true; 
+      const days = (new Date(o.endDate) - new Date()) / (1000 * 60 * 60 * 24);
+      return days <= MAX_DAYS;
+    };
+
+    const arbOpps = arbOppsRaw.filter(isQuickResolve);
+    const yieldOpps = filterSafeYield(yieldOppsRaw).filter(isQuickResolve);
+    const longshotOpps = filterSafeLongshots(longshotOppsRaw).filter(isQuickResolve);
+    const fadeSignals = filterSafeFades(fadeSignalsRaw).filter(isQuickResolve);
+    const volSpikeSignals = filterSafeVolumeSpikes(volSpikeSignalsRaw).filter(isQuickResolve);
+    const whaleSignals = filterSafeWhales(whaleSignalsRaw).filter(isQuickResolve);
+    const filteredResearch = researchOpps.filter(isQuickResolve);
 
     const safeTradeCount = arbOpps.length + yieldOpps.length;
 
     if (config.strategy.safeMode) {
-      logger.info(`[SafeMode] Filtered → Yield: ${yieldOppsRaw.length}→${yieldOpps.length}, Long: ${longshotOppsRaw.length}→${longshotOpps.length}, Fade: ${fadeSignalsRaw.length}→${fadeSignals.length}, Vol: ${volSpikeSignalsRaw.length}→${volSpikeSignals.length}`);
+      logger.info(`[SafeMode] Filtered → Yield: ${yieldOpps.length}, Long: ${longshotOpps.length}, Research: ${filteredResearch.length}`);
     }
 
     // Step 6: Console output
@@ -179,15 +187,15 @@ async function runScan() {
     if (volSpikeSignals.length > 0) {
       console.log(chalk.yellow(`\n📊 HIGH-CONF VOLUME: ${volSpikeSignals.length}`));
     }
-    if (researchOpps.length > 0) {
-      console.log(chalk.magenta(`\n🔬 RESEARCH TRADES: ${researchOpps.length}`));
-      researchOpps.slice(0, 5).forEach(o =>
+    if (filteredResearch.length > 0) {
+      console.log(chalk.magenta(`\n🔬 RESEARCH TRADES: ${filteredResearch.length}`));
+      filteredResearch.slice(0, 5).forEach(o =>
         console.log(`  → ${o.categoryEmoji} ${o.resolveLabel} | ${o.question?.slice(0, 40)} | YES:${(o.yesPrice*100).toFixed(0)}¢ NO:${(o.noPrice*100).toFixed(0)}¢ | Score:${o.researchScore}`)
       );
     }
 
     const scanDurationMs = Date.now() - startTime;
-    logger.info(`✅ Scan done in ${scanDurationMs}ms | SAFE:${safeTradeCount} ARB:${arbOpps.length} YIELD:${yieldOpps.length} RESEARCH:${researchOpps.length} LONG:${longshotOpps.length} FADE:${fadeSignals.length} VOL:${volSpikeSignals.length}`);
+    logger.info(`✅ Scan done in ${scanDurationMs}ms | SAFE:${safeTradeCount} ARB:${arbOpps.length} YIELD:${yieldOpps.length} RESEARCH:${filteredResearch.length} LONG:${longshotOpps.length}`);
 
     // Step 7: Telegram alerts (DEDUPLICATED)
     let newAlertsSentThisScan = 0;
@@ -241,7 +249,7 @@ async function runScan() {
     }
 
     // 🔬 Research trades — top 3, 1 hour dedup
-    for (const opp of researchOpps.slice(0, 3)) {
+    for (const opp of filteredResearch.slice(0, 3)) {
       if (!isDuped(alertedResearch, makeResearchKey(opp), config.alerts.researchDedupTTL)) {
         await telegram.alertResearchTrade(opp);
         newAlertsSentThisScan++;
