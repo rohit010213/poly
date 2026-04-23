@@ -137,23 +137,22 @@ function detectTodayResearchTrades(markets) {
     if (!yesPrice || !noPrice) continue;
 
     const hours = hoursUntilResolve(market.endDate);
-    // Only markets resolving within maxResearchHours (default 336h = 14 days)
-    if (hours > (config.strategy.researchMaxHours || 336) || hours <= 0) continue;
+    // Relaxed timing: 14 days window, and allow markets that just finished (-24h) but still active
+    if (hours > (config.strategy.researchMaxHours || 336) || hours < -24) continue;
 
-    // Skip near-certainty markets — no research edge there
+    // Skip only extreme certainty (92%+)
     if (yesPrice > 0.92 || yesPrice < 0.08) continue;
 
-    // Need decent liquidity (Relaxed for more opportunities)
+    // NO LIQUIDITY FILTER for research trades — let user decide
     const liq = parseFloat(market.liquidity || 0);
     const vol = parseFloat(market.volume || 0);
-    if (liq < 250 && vol < 1000) continue;
 
     const { category, emoji } = categorizeMarket(market.question);
     const researchLinks = generateResearchLinks(market.question, category, market.url);
     const researchScore = assessResearchPotential(market, hours);
 
-    // Only show decent research potential (score >= 3)
-    if (researchScore < (config.strategy.researchMinScore || 3)) continue;
+    // Show almost everything (score >= 1)
+    if (researchScore < (config.strategy.researchMinScore || 1)) continue;
 
     // Determine which side might have edge based on price position
     let suggestedResearch;
