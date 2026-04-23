@@ -143,10 +143,10 @@ function detectTodayResearchTrades(markets) {
     // Skip near-certainty markets — no research edge there
     if (yesPrice > 0.92 || yesPrice < 0.08) continue;
 
-    // Need decent liquidity
+    // Need decent liquidity (Relaxed for more opportunities)
     const liq = parseFloat(market.liquidity || 0);
     const vol = parseFloat(market.volume || 0);
-    if (liq < 1000 && vol < 5000) continue;
+    if (liq < 250 && vol < 1000) continue;
 
     const { category, emoji } = categorizeMarket(market.question);
     const researchLinks = generateResearchLinks(market.question, category, market.url);

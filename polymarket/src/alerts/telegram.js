@@ -60,6 +60,7 @@ async function alertYieldPlay(opp) {
 🏦 *SAFE TRADE ALERT* ${riskBadge(opp.riskLevel)}
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
+📂 *SECTION:* 🏦 **YIELD PLAY** (Near-Certainty)
 📋 *Market:* ${opp.question?.slice(0, 100)}
 
 ━━━ *KYA KARNA HAI:* ━━━
@@ -100,6 +101,7 @@ async function alertArbitrage(opp) {
 🔥 *GUARANTEED PROFIT ALERT* 🟢 RISK-FREE
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
+📂 *SECTION:* 🔥 **ARBITRAGE** (Cross-Platform)
 📋 *Market:* ${opp.question?.slice(0, 80)}
 
 ━━━ *KYA KARNA HAI (2 Steps):* ━━━
@@ -148,6 +150,7 @@ async function alertLongshot(opp) {
 ${emoji} *${isSell ? 'OVERPRICED MARKET' : 'UNDERPRICED FAVORITE'}*
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
+📂 *SECTION:* 📈 **LONGSHOT / FAVORITE**
 📋 *Market:* ${opp.question?.slice(0, 80)}
 
 ━━━ *KYA KARNA HAI:* ━━━
@@ -178,6 +181,7 @@ async function alertWhale(signal) {
 🐋 *WHALE ALERT* [${signal.confidence}]
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
+📂 *SECTION:* 🐋 **WHALE TRACKER**
 📋 *Market:* ${signal.question?.slice(0, 80)}
 
 ━━━ *KYA HUA:* ━━━
@@ -231,6 +235,7 @@ async function alertFade(signal) {
 📉 *PANIC SALE DETECTED* [${signal.confidence}]
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
+📂 *SECTION:* 📉 **OVERREACTION FADE**
 📋 *Market:* ${signal.question?.slice(0, 80)}
 
 ━━━ *KYA HUA:* ━━━
@@ -264,6 +269,7 @@ async function alertVolumeSpike(signal) {
 📊 *SMART MONEY ALERT* [${signal.confidence}]
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
+📂 *SECTION:* 📊 **VOLUME SPIKE**
 📋 *Market:* ${signal.question?.slice(0, 80)}
 
 ━━━ *KYA HUA:* ━━━
@@ -346,6 +352,7 @@ async function alertResearchTrade(opp) {
 🔬 *RESEARCH TRADE* ${opp.categoryEmoji} ${opp.category} ${opp.resolveLabel}
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
+📂 *SECTION:* 🔬 **RESEARCH TRADE** (Information Edge)
 📋 *Market:* ${opp.question?.slice(0, 100)}
 
 ━━━ *ABHI KYA HAI:* ━━━
