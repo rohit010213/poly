@@ -1,20 +1,20 @@
-const config         = require('./config');
-const logger         = require('./utils/logger');
-const polyFetcher    = require('./fetchers/polymarket');
-const kalshiFetcher  = require('./fetchers/kalshi');
+const config = require('./config');
+const logger = require('./utils/logger');
+const polyFetcher = require('./fetchers/polymarket');
+const kalshiFetcher = require('./fetchers/kalshi');
 const { matchMarkets, detectArbitrage } = require('./strategies/arbitrage');
-const { detectLongshots }               = require('./strategies/longshot');
-const { detectWhaleSignals }            = require('./strategies/whaleTracker');
-const { detectResolutionEdge }          = require('./strategies/resolutionEdge');
-const telegram       = require('./alerts/telegram');
-const { table }      = require('table');
-const chalk          = require('chalk');
+const { detectLongshots } = require('./strategies/longshot');
+const { detectWhaleSignals } = require('./strategies/whaleTracker');
+const { detectResolutionEdge } = require('./strategies/resolutionEdge');
+const telegram = require('./alerts/telegram');
+const { table } = require('table');
+const chalk = require('chalk');
 
 // ── Track already-alerted opportunities to avoid spam ────────────
-const alertedArb      = new Set();
+const alertedArb = new Set();
 const alertedLongshot = new Set();
-const alertedWhale    = new Set();
-const DEDUP_TTL_MS    = 10 * 60 * 1000;  // 10 minutes
+const alertedWhale = new Set();
+const DEDUP_TTL_MS = 10 * 60 * 1000;  // 10 minutes
 
 function makeArbKey(opp) {
   return `${opp.poly.id}::${opp.kalshi.ticker}::${opp.poly.side}`;
@@ -80,16 +80,26 @@ async function runScan() {
       polyFetcher.fetchLeaderboard({ limit: 25 }),
     ]);
 
-    // 2. Match markets across platforms
+    logger.info(`[Scanner] Step 1 done — Poly: ${polyMarkets.length}, Kalshi: ${kalshiMarkets.length}, Whales: ${whaleTrades.length}`);
+
+    // 2. Match markets across platforms (now fast with keyword index)
+    logger.info(`[Scanner] Step 2 — Matching markets...`);
     const pairs = matchMarkets(polyMarkets, kalshiMarkets);
 
-    // 3. Run all strategies
-    const [arbOpps, longshotOpps, whaleSignals, resEdgeOpps] = await Promise.all([
-      Promise.resolve(detectArbitrage(pairs)),
-      Promise.resolve(detectLongshots([...polyMarkets, ...kalshiMarkets])),
-      Promise.resolve(detectWhaleSignals(whaleTrades, leaderboard)),
-      Promise.resolve(detectResolutionEdge([...polyMarkets, ...kalshiMarkets])),
-    ]);
+    // 3. Run strategies sequentially (avoid simultaneous CPU spike)
+    logger.info(`[Scanner] Step 3 — Running arbitrage strategy...`);
+    const arbOpps = detectArbitrage(pairs);
+
+    logger.info(`[Scanner] Step 4 — Running longshot strategy...`);
+    const longshotOpps = detectLongshots([...polyMarkets, ...kalshiMarkets]);
+
+    logger.info(`[Scanner] Step 5 — Running whale tracker...`);
+    const whaleSignals = detectWhaleSignals(whaleTrades, leaderboard);
+
+    logger.info(`[Scanner] Step 6 — Running resolution edge strategy...`);
+    const resEdgeOpps = detectResolutionEdge([...polyMarkets, ...kalshiMarkets]);
+
+    logger.info(`[Scanner] Step 7 — Sending alerts...`);
 
     // 4. Print to console
     printArbTable(arbOpps);
@@ -149,10 +159,10 @@ async function runScan() {
 
     // Telegram summary every scan
     await telegram.alertScanSummary({
-      arbCount:      arbOpps.length,
+      arbCount: arbOpps.length,
       longshotCount: longshotOpps.length,
-      whaleCount:    whaleSignals.length,
-      resEdgeCount:  resEdgeOpps.length,
+      whaleCount: whaleSignals.length,
+      resEdgeCount: resEdgeOpps.length,
       scanDurationMs,
     });
 
