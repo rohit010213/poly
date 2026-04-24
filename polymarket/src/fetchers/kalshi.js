@@ -44,17 +44,22 @@ async function fetchMarkets() {
         const ticker = (m.event_ticker || m.ticker || '').toLowerCase();
         let category = (m.category || 'General').toUpperCase();
 
-        // High-overlap economic tickers
-        const isEcon = /fed|cpi|gdp|jobs|unempl|fomc|rate|interest|inflation|recession|gas|funds|economic|debt|deficit|treasury|yield|cpx|indx/i.test(`${q} ${ticker}`);
-        // High-overlap political tickers
-        const isPoly = /trump|biden|election|president|vote|senate|congress|poll|confirm|shutdown|nominee|strait|war|conflict|israel|ukraine|china|iran|taiwan|pres-|sen-|hou-/i.test(`${q} ${ticker}`);
-        // Crypto
-        const isCrypto = /bitcoin|btc|eth|crypto|solana|sol|price|ledger|kraken|coinbase/i.test(`${q} ${ticker}`);
+        const isSports = /mlb|nba|nfl|nhl|soccer|baseball|basketball|football|hockey|parlay|strikeout/i.test(`${q} ${ticker}`);
+        if (isSports) {
+          category = 'SPORTS';
+        } else {
+          // High-overlap economic tickers
+          const isEcon = /fed|cpi|gdp|jobs|unempl|fomc|rate|interest|inflation|recession|gas|funds|economic|debt|deficit|treasury|yield|cpx|indx/i.test(`${q} ${ticker}`);
+          // High-overlap political tickers
+          const isPoly = /trump|biden|election|president|vote|senate|congress|poll|confirm|shutdown|nominee|strait|war|conflict|israel|ukraine|china|iran|taiwan|^pres-|^sen-|^hou-/i.test(`${q} ${ticker}`);
+          // Crypto
+          const isCrypto = /bitcoin|btc|eth|crypto|solana|sol|price|ledger|kraken|coinbase/i.test(`${q} ${ticker}`);
 
-        if (isEcon || category === 'ECONOMICS' || category === 'FINANCIALS' || category === 'ECONOMY') category = 'ECONOMICS';
-        else if (isPoly || category === 'POLITICS' || category === 'ELECTION' || category === 'POLITICAL') category = 'POLITICS';
-        else if (isCrypto || category === 'CRYPTO') category = 'CRYPTO';
-        else if (category === 'BUSINESS') category = 'ECONOMICS';
+          if (isEcon || category === 'ECONOMICS' || category === 'FINANCIALS' || category === 'ECONOMY') category = 'ECONOMICS';
+          else if (isPoly || category === 'POLITICS' || category === 'ELECTION' || category === 'POLITICAL') category = 'POLITICS';
+          else if (isCrypto || category === 'CRYPTO') category = 'CRYPTO';
+          else if (category === 'BUSINESS') category = 'ECONOMICS';
+        }
 
         return {
           platform:   'kalshi',
