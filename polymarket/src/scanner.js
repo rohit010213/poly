@@ -115,6 +115,19 @@ async function runScan() {
       );
     }
 
+    // ── Scan Summary & Heartbeat ─────────────────────────────────────────
+    const SUMMARY_HEARTBEAT_TTL = 60 * 60 * 1000;
+    const shouldSendSummary = alertsSent > 0 ||
+      !isDuped(alertedArb, '__HEARTBEAT__', SUMMARY_HEARTBEAT_TTL);
+
+    if (shouldSendSummary) {
+      await telegram.alertScanSummary({
+        arbCount: arbOpps.length,
+        newAlerts: alertsSent,
+        scanDurationMs,
+      });
+    }
+
     return { arbOpps, correlationOpps, mmOpps };
   } catch (err) {
     logger.error(`[Scanner] Fatal: ${err.message}`);

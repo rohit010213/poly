@@ -110,6 +110,12 @@ function matchMarkets(polyMarkets, kalshiMarkets) {
   const high = pairs.filter(p => p.matchQuality === 'HIGH').length;
   const med = pairs.filter(p => p.matchQuality === 'MEDIUM').length;
   logger.info(`[Arbitrage] Matched ${pairs.length} pairs in ${Date.now() - t0}ms (HIGH:${high} MED:${med} LOW:${pairs.length - high - med})`);
+
+  if (pairs.length > 0) {
+    const bestMatch = pairs.sort((a, b) => a.matchScore - b.matchScore)[0];
+    logger.info(`  → Best Match: "${bestMatch.polyMarket.question.slice(0, 30)}..." [Score: ${bestMatch.matchScore.toFixed(3)}]`);
+  }
+
   return pairs;
 }
 
