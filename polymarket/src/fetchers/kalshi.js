@@ -50,8 +50,11 @@ async function fetchMarkets() {
         } else {
           // High-overlap economic tickers
           const isEcon = /\bfed\b|\bcpi\b|\bgdp\b|jobs|unempl|\bfomc\b|rate|interest|inflation|recession|gas|funds|economic|debt|deficit|treasury|yield|cpx|indx/i.test(`${q} ${ticker}`);
+          
           // High-overlap political tickers
-          const isPoly = /trump|biden|election|president|vote|senate|congress|poll|confirm|shutdown|nominee|strait|\bwar\b|conflict|israel|ukraine|china|\biran\b|taiwan|^pres-|^sen-|^hou-/i.test(`${q} ${ticker}`);
+          const hasPolyTicker = /^pres-|^sen-|^hou-|^house-/i.test(ticker);
+          const isPoly = hasPolyTicker || /trump|biden|election|president|vote|senate|congress|poll|confirm|shutdown|nominee|strait|\bwar\b|conflict|\bisrael\b|\bukraine\b|\bchina\b|\biran\b|\btaiwan\b/i.test(`${q} ${ticker}`);
+          
           // Crypto
           const isCrypto = /bitcoin|btc|eth|crypto|solana|sol|price|ledger|kraken|coinbase/i.test(`${q} ${ticker}`);
 
