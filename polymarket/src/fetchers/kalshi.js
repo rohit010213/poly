@@ -36,6 +36,16 @@ async function fetchMarkets() {
         const yesPrice  = lastPrice || midPrice;
         const noPrice   = 1 - yesPrice;
 
+        // Robust Category Detection
+        const q = m.title?.toLowerCase() || '';
+        let category = (m.category || 'General').toUpperCase();
+
+        if (category === 'GENERAL' || category === 'FINANCIALS') {
+          if (/bitcoin|btc|eth|crypto|solana|sol|price/i.test(q)) category = 'CRYPTO';
+          else if (/fed|rate|cpi|inflation|gdp|jobs|unemployment|fomc|treasury/i.test(q)) category = 'ECONOMICS';
+          else if (/trump|biden|election|president|vote|senate|congress|poll/i.test(q)) category = 'POLITICS';
+        }
+
         return {
           platform:   'kalshi',
           id:         m.ticker,
@@ -57,7 +67,7 @@ async function fetchMarkets() {
           active:     m.status === 'open',
           url:        `https://kalshi.com/markets/${m.event_ticker}/${m.ticker}`,
           ticker:     m.ticker,
-          category:   (m.category || 'General').toUpperCase(),
+          category,
         };
       });
 

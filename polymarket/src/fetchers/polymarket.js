@@ -42,6 +42,16 @@ async function fetchMarkets() {
 
         if (!yesPrice || !noPrice) continue;
 
+        // Robust Category Detection
+        const q = m.question?.toLowerCase() || '';
+        let category = (m.category || 'General').toUpperCase();
+        
+        if (category === 'GENERAL') {
+          if (/bitcoin|btc|eth|crypto|solana|sol|price/i.test(q)) category = 'CRYPTO';
+          else if (/fed|rate|cpi|inflation|gdp|jobs|unemployment|fomc|treasury/i.test(q)) category = 'ECONOMICS';
+          else if (/trump|biden|election|president|vote|senate|congress|poll/i.test(q)) category = 'POLITICS';
+        }
+
         markets.push({
           platform: 'polymarket',
           id: m.id,
@@ -57,7 +67,7 @@ async function fetchMarkets() {
           active: m.active && !m.closed,
           url: `https://polymarket.com/market/${m.slug}`,
           clobTokenIds: JSON.parse(m.clobTokenIds || '[]'),
-          category: (m.category || 'General').toUpperCase(),
+          category,
           lastPrice: m.lastTradePrice ? parseFloat(m.lastTradePrice) : null,
         });
       } catch (e) {
