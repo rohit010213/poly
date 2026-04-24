@@ -35,65 +35,44 @@ function extractKeywords(text = '') {
 }
 
 /**
- * FAST: Category-focused keyword index pre-filter + targeted fuzzy match
+ * UNIVERSAL: Category-based candidate selection + fuzzy match
  */
 function matchMarkets(polyMarkets, kalshiMarkets) {
   const RELEVANT_CATEGORIES = new Set(['ECONOMICS', 'POLITICS', 'CRYPTO', 'FINANCIALS', 'FINANCE', 'BUSINESS']);
   
-  // Filter for high-overlap categories only
   const filteredPoly = polyMarkets.filter(m => RELEVANT_CATEGORIES.has(m.category));
   const filteredKalshi = kalshiMarkets.filter(m => RELEVANT_CATEGORIES.has(m.category));
 
-  logger.info(`[Arbitrage] Focus Scan: ${filteredPoly.length} Poly × ${filteredKalshi.length} Kalshi (Filtered from ${polyMarkets.length}/${kalshiMarkets.length})`);
+  logger.info(`[Arbitrage] Focus Scan: ${filteredPoly.length} Poly × ${filteredKalshi.length} Kalshi`);
   const t0 = Date.now();
 
-  // Pre-process kalshi: normalize text, build keyword index
   const processedKalshi = filteredKalshi.map(km => ({
     ...km,
-    _normalizedQ: normalizeText(km.question),
+    _normalizedQ: normalizeText(km.question)
+      .replace(/\bbtc\b/g, 'bitcoin')
+      .replace(/\beth\b/g, 'ethereum')
   }));
-
-  const kalshiIndex = new Map();
-  for (const km of processedKalshi) {
-    for (const kw of extractKeywords(km.question)) {
-      if (!kalshiIndex.has(kw)) kalshiIndex.set(kw, []);
-      kalshiIndex.get(kw).push(km);
-    }
-  }
 
   const pairs = [];
   const seenPairs = new Set();
 
   for (const poly of filteredPoly) {
-    const polyKws = extractKeywords(poly.question);
-    if (polyKws.length === 0) continue;
+    const polyNorm = normalizeText(poly.question)
+      .replace(/\bbtc\b/g, 'bitcoin')
+      .replace(/\beth\b/g, 'ethereum');
 
-    // Score each candidate by shared keywords
-    const scores = new Map();
-    for (const kw of polyKws) {
-      for (const km of (kalshiIndex.get(kw) || [])) {
-        scores.set(km.id, (scores.get(km.id) || 0) + 1);
-      }
-    }
-    if (scores.size === 0) continue;
+    // Compare against ALL Kalshi markets in the SAME category
+    const candidates = processedKalshi.filter(k => k.category === poly.category || (poly.category === 'ECONOMICS' && k.category === 'FINANCIALS'));
+    
+    if (candidates.length === 0) continue;
 
-    // Top 20 candidates by shared keyword count
-    const candidates = [...scores.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 20)
-      .map(([id]) => processedKalshi.find(k => k.id === id))
-      .filter(Boolean);
-
-    // Fuzzy match on small candidate set
     const fuse = new Fuse(candidates, {
-      keys: [{ name: '_normalizedQ', weight: 0.7 }, { name: 'slug', weight: 0.3 }],
+      keys: ['_normalizedQ'],
       threshold: config.scanner.fuzzyMatchScore,
       includeScore: true,
-      ignoreLocation: true,
-      minMatchCharLength: 3,
     });
 
-    const results = fuse.search(normalizeText(poly.question));
+    const results = fuse.search(polyNorm);
     if (results.length === 0) continue;
 
     const best = results[0];
@@ -101,19 +80,21 @@ function matchMarkets(polyMarkets, kalshiMarkets) {
     if (seenPairs.has(pairKey)) continue;
     seenPairs.add(pairKey);
 
-    const score = best.score || 0;
-    const matchQuality = score < 0.15 ? 'HIGH' : score < 0.35 ? 'MEDIUM' : 'LOW';
-
-    pairs.push({ polyMarket: poly, kalshiMarket: best.item, matchScore: score, matchQuality });
+    pairs.push({ 
+      polyMarket: poly, 
+      kalshiMarket: best.item, 
+      matchScore: best.score || 0, 
+      matchQuality: (best.score || 0) < 0.2 ? 'HIGH' : (best.score || 0) < 0.4 ? 'MEDIUM' : 'LOW' 
+    });
   }
 
   const high = pairs.filter(p => p.matchQuality === 'HIGH').length;
   const med = pairs.filter(p => p.matchQuality === 'MEDIUM').length;
-  logger.info(`[Arbitrage] Matched ${pairs.length} pairs in ${Date.now() - t0}ms (HIGH:${high} MED:${med} LOW:${pairs.length - high - med})`);
+  logger.info(`[Arbitrage] Matched ${pairs.length} pairs (HIGH:${high} MED:${med})`);
 
   if (pairs.length > 0) {
     const bestMatch = pairs.sort((a, b) => a.matchScore - b.matchScore)[0];
-    logger.info(`  → Best Match: "${bestMatch.polyMarket.question.slice(0, 30)}..." [Score: ${bestMatch.matchScore.toFixed(3)}]`);
+    logger.info(`  → Best Match: "${bestMatch.polyMarket.question.slice(0, 30)}..." with "${bestMatch.kalshiMarket.question.slice(0, 30)}..." [Score: ${bestMatch.matchScore.toFixed(3)}]`);
   }
 
   return pairs;

@@ -81,8 +81,8 @@ async function fetchMarkets() {
       allMarkets.push(...markets);
       cursor = body.cursor || null;
 
-      // Safety: max 5 pages
-      if (allMarkets.length > 1000) break;
+      // Safety: max 3000 markets
+      if (allMarkets.length >= 3000) break;
     } while (cursor);
 
     logger.info(`[Kalshi] Fetched ${allMarkets.length} active markets`);

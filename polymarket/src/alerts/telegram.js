@@ -299,22 +299,17 @@ async function alertVolumeSpike(signal) {
 //  SCAN SUMMARY
 // ══════════════════════════════════════════════════════════════════
 
-async function alertScanSummary({ arbCount, longshotCount, whaleCount, resEdgeCount, yieldCount = 0, fadeCount = 0, volSpikeCount = 0, researchCount = 0, safeTradeCount = 0, newAlerts = 0, scanDurationMs }) {
-  const total = arbCount + longshotCount + whaleCount + resEdgeCount + yieldCount + fadeCount + volSpikeCount + researchCount;
+async function alertScanSummary({ arbCount = 0, correlationCount = 0, mmCount = 0, newAlerts = 0, scanDurationMs }) {
+  const total = arbCount + correlationCount + mmCount;
   const msg = `
-📊 *${newAlerts > 0 ? `NAYE ALERTS (${newAlerts})` : 'BOT ALIVE — Hourly Update'}*
+📊 *${newAlerts > 0 ? `NAYE ALERTS (${newAlerts})` : 'BOT ALIVE — Heartbeat'}*
 ━━━━━━━━━━━━━━━━━━━━
-🟢 Safe Trades:    *${safeTradeCount}*
 🔥 Arbitrage:      *${arbCount}*
-🏦 Yield Play:     *${yieldCount}*
-🔬 Research:       *${researchCount}*
-📉 Longshot:       *${longshotCount}*
-🐋 Whale:          *${whaleCount}*
-📉 Fade:           *${fadeCount}*
-📊 Vol Spike:      *${volSpikeCount}*
-🔍 Res. Edge:      *${resEdgeCount}*
+🧠 Correlation:    *${correlationCount}*
+🏦 Market Making:   *${mmCount}*
 ━━━━━━━━━━━━━━━━━━━━
-📌 Total: *${total}* | Safe Mode: *${config.strategy.safeMode ? 'ON 🛡️' : 'OFF'}*
+📌 Total Ops: *${total}*
+🛡️ Mode: *3-PHASE ROADMAP*
 ⏱ ${scanDurationMs}ms | ${new Date().toLocaleTimeString()}
 `;
   await send(msg);
