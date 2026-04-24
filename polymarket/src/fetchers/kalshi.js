@@ -37,13 +37,16 @@ async function fetchMarkets() {
         const noPrice   = 1 - yesPrice;
 
         // Robust Category Detection
-        const q = m.title?.toLowerCase() || '';
+        const q = (m.title || '').toLowerCase();
+        const ticker = (m.event_ticker || '').toLowerCase();
         let category = (m.category || 'General').toUpperCase();
 
-        if (category === 'GENERAL' || category === 'FINANCIALS') {
-          if (/bitcoin|btc|eth|crypto|solana|sol|price/i.test(q)) category = 'CRYPTO';
-          else if (/fed|rate|cpi|inflation|gdp|jobs|unemployment|fomc|treasury/i.test(q)) category = 'ECONOMICS';
-          else if (/trump|biden|election|president|vote|senate|congress|poll/i.test(q)) category = 'POLITICS';
+        // If not already a target category, try guessing
+        if (!['ECONOMICS', 'POLITICS', 'CRYPTO'].includes(category)) {
+          const combined = `${q} ${ticker}`;
+          if (/bitcoin|btc|eth|crypto|solana|sol|price/i.test(combined)) category = 'CRYPTO';
+          else if (/fed|rate|cpi|inflation|gdp|jobs|unemployment|fomc|treasury|interest/i.test(combined)) category = 'ECONOMICS';
+          else if (/trump|biden|election|president|vote|senate|congress|poll/i.test(combined)) category = 'POLITICS';
         }
 
         return {
