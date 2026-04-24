@@ -43,8 +43,14 @@ function matchMarkets(polyMarkets, kalshiMarkets) {
   const filteredPoly = polyMarkets.filter(m => RELEVANT_CATEGORIES.has(m.category));
   const filteredKalshi = kalshiMarkets.filter(m => RELEVANT_CATEGORIES.has(m.category));
 
-  logger.info(`[Arbitrage] Focus Scan: ${filteredPoly.length} Poly × ${filteredKalshi.length} Kalshi`);
-  const t0 = Date.now();
+  // Log Category Distribution
+  const polyCats = filteredPoly.reduce((acc, m) => { acc[m.category] = (acc[m.category] || 0) + 1; return acc; }, {});
+  const kalshiCats = filteredKalshi.reduce((acc, m) => { acc[m.category] = (acc[m.category] || 0) + 1; return acc; }, {});
+  logger.info(`[Arbitrage] Categories — Poly: ${JSON.stringify(polyCats)} | Kalshi: ${JSON.stringify(kalshiCats)}`);
+
+  const pairs = [];
+  const seenPairs = new Set();
+  let bestOverallMatch = { score: 1, poly: null, kalshi: null };
 
   const processedKalshi = filteredKalshi.map(km => ({
     ...km,
@@ -53,49 +59,48 @@ function matchMarkets(polyMarkets, kalshiMarkets) {
       .replace(/\beth\b/g, 'ethereum')
   }));
 
-  const pairs = [];
-  const seenPairs = new Set();
-
   for (const poly of filteredPoly) {
     const polyNorm = normalizeText(poly.question)
-      .replace(/\bbtc\b/g, 'bitcoin')
-      .replace(/\beth\b/g, 'ethereum');
+      .replace(/\bbtc\b/g, 'bitcoin').replace(/\beth\b/g, 'ethereum')
+      .replace(/0\.25%|0\.25 percent/g, '25 bps').replace(/0\.5%|0\.5 percent/g, '50 bps');
 
-    // Compare against ALL Kalshi markets in the SAME category
     const candidates = processedKalshi.filter(k => k.category === poly.category || (poly.category === 'ECONOMICS' && k.category === 'FINANCIALS'));
-    
     if (candidates.length === 0) continue;
 
-    const fuse = new Fuse(candidates, {
-      keys: ['_normalizedQ'],
-      threshold: config.scanner.fuzzyMatchScore,
-      includeScore: true,
-    });
+    // Use a very loose threshold just to find the "closest" one for logging
+    const debugFuse = new Fuse(candidates, { keys: ['_normalizedQ'], threshold: 0.99, includeScore: true });
+    const debugResults = debugFuse.search(polyNorm);
 
-    const results = fuse.search(polyNorm);
-    if (results.length === 0) continue;
+    if (debugResults.length > 0) {
+      const best = debugResults[0];
+      if (best.score < bestOverallMatch.score) {
+        bestOverallMatch = { score: best.score, poly: poly.question, kalshi: best.item.question };
+      }
 
-    const best = results[0];
-    const pairKey = `${poly.id}::${best.item.id}`;
-    if (seenPairs.has(pairKey)) continue;
-    seenPairs.add(pairKey);
-
-    pairs.push({ 
-      polyMarket: poly, 
-      kalshiMarket: best.item, 
-      matchScore: best.score || 0, 
-      matchQuality: (best.score || 0) < 0.2 ? 'HIGH' : (best.score || 0) < 0.4 ? 'MEDIUM' : 'LOW' 
-    });
+      // Real match with strict threshold
+      if (best.score <= config.scanner.fuzzyMatchScore) {
+        const pairKey = `${poly.id}::${best.item.id}`;
+        if (!seenPairs.has(pairKey)) {
+          seenPairs.add(pairKey);
+          pairs.push({ 
+            polyMarket: poly, 
+            kalshiMarket: best.item, 
+            matchScore: best.score, 
+            matchQuality: best.score < 0.2 ? 'HIGH' : 'MEDIUM' 
+          });
+        }
+      }
+    }
   }
 
   const high = pairs.filter(p => p.matchQuality === 'HIGH').length;
   const med = pairs.filter(p => p.matchQuality === 'MEDIUM').length;
   logger.info(`[Arbitrage] Scan complete (Matched:${pairs.length} HIGH:${high} MED:${med})`);
 
-  // Log the best possible match found (for debugging)
-  if (processedKalshi.length > 0 && filteredPoly.length > 0) {
-     // This is just to see what's failing to match
-     logger.info(`  → Best Raw Match Score: ${pairs.length > 0 ? pairs.sort((a,b)=>a.matchScore-b.matchScore)[0].matchScore.toFixed(3) : 'No decent match found'}`);
+  if (bestOverallMatch.poly) {
+    logger.info(`  → Best Raw Match: "${bestOverallMatch.poly.slice(0, 40)}..." vs "${bestOverallMatch.kalshi.slice(0, 40)}..." [Score: ${bestOverallMatch.score.toFixed(3)}]`);
+  } else {
+    logger.info(`  → Best Raw Match: None found in ${filteredKalshi.length} candidates`);
   }
 
   return pairs;
