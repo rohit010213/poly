@@ -76,10 +76,16 @@ async function fetchMarkets() {
   }
 }
 
-/**
- * Fetch orderbook for a specific market
- * @param {string} ticker - e.g. "INXD-23DEC29-T4600"
- */
+async function fetchOrderbook(ticker) {
+  try {
+    const res = await api.get(`/markets/${ticker}/orderbook`);
+    return res.data?.orderbook_fp || null;
+  } catch (err) {
+    logger.error(`[Kalshi] Orderbook fetch error (${ticker}): ${err.message}`);
+    return null;
+  }
+}
+
 /**
  * Fetch recent large trades (for whale tracking)
  * @returns {Promise<Array>}
