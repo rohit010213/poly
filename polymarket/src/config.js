@@ -5,6 +5,10 @@ const config = {
     gammaApi: 'https://gamma-api.polymarket.com',
     clobApi: 'https://clob.polymarket.com',
     dataApi: 'https://data-api.polymarket.com',
+    // CLOB Auth (Required for Phase 3 Market Making)
+    accessKey: process.env.POLY_ACCESS_KEY || null,
+    secret: process.env.POLY_SECRET || null,
+    passphrase: process.env.POLY_PASSPHRASE || null,
   },
   kalshi: {
     baseApi: 'https://api.elections.kalshi.com/trade-api/v2',
@@ -59,7 +63,7 @@ const config = {
   scanner: {
     intervalSeconds: parseInt(process.env.SCAN_INTERVAL_SECONDS) || 30,
     marketsPerFetch: 2000,
-    fuzzyMatchScore: 0.6,
+    fuzzyMatchScore: 0.4,
   },
   alerts: {
     resEdgeDedupTTL: 60 * 60 * 1000,

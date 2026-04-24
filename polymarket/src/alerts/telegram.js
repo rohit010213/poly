@@ -329,22 +329,19 @@ async function alertResearchTrade(opp) {
 
   // Build research links section
   let researchSection = '';
-  researchSection += `🔗 [Market Link](${links.market || opp.url})\n`;
-  researchSection += `📰 [Google News](${links.googleNews})\n`;
-  researchSection += `🐦 [Twitter/X Live](${links.twitter})\n`;
-  researchSection += `💬 [Reddit](${links.reddit})\n`;
-  researchSection += `🔍 [Google Search](${links.google})\n`;
+  researchSection += `📰 [Google News](${links.googleNews}) | 🐦 [Twitter](${links.twitter})\n`;
+  researchSection += `💬 [Reddit](${links.reddit}) | 🔍 [Google](${links.google})\n`;
 
   // Category-specific links
-  if (links.coingecko) researchSection += `📊 [CoinGecko](${links.coingecko})\n`;
-  if (links.cryptoNews) researchSection += `₿ [CoinDesk](${links.cryptoNews})\n`;
-  if (links.tradingview) researchSection += `📈 [TradingView](${links.tradingview})\n`;
-  if (links.fiveThirtyEight) researchSection += `🗳️ [538 Polls](${links.fiveThirtyEight})\n`;
-  if (links.realClearPolitics) researchSection += `🏛️ [RCP](${links.realClearPolitics})\n`;
-  if (links.fredData) researchSection += `📊 [FRED Data](${links.fredData})\n`;
-  if (links.fedWatch) researchSection += `🏦 [FedWatch](${links.fedWatch})\n`;
-  if (links.espn) researchSection += `⚽ [ESPN](${links.espn})\n`;
-  if (links.yahooFinance) researchSection += `💹 [Yahoo Finance](${links.yahooFinance})\n`;
+  const extraLinks = [];
+  if (links.coingecko) extraLinks.push(`[CoinGecko](${links.coingecko})`);
+  if (links.cryptoNews) extraLinks.push(`[CoinDesk](${links.cryptoNews})`);
+  if (links.fiveThirtyEight) extraLinks.push(`[538 Polls](${links.fiveThirtyEight})`);
+  if (links.realClearPolitics) extraLinks.push(`[RCP](${links.realClearPolitics})`);
+  if (links.fredData) extraLinks.push(`[FRED](${links.fredData})`);
+  if (links.espn) extraLinks.push(`[ESPN](${links.espn})`);
+  
+  if (extraLinks.length > 0) researchSection += `${extraLinks.join(' | ')}\n`;
 
   const sr = opp.suggestedResearch || {};
 
@@ -359,6 +356,7 @@ async function alertResearchTrade(opp) {
 📊 YES: *${(opp.yesPrice * 100).toFixed(1)}¢* | NO: *${(opp.noPrice * 100).toFixed(1)}¢*
 ⏰ *${opp.resolveLabel}* (${opp.hoursToResolve.toFixed(0)} hours baaki)
 💰 Max profit: *+${opp.maxProfitPct}%*
+📊 24h Vol: *$${(opp.volume24h || 0).toLocaleString()}* | Liq: *$${(opp.liquidity || 0).toLocaleString()}*
 
 ━━━ *KYA RESEARCH KARNA HAI:* ━━━
 🎯 ${sr.bias || 'Research both sides'}
@@ -367,22 +365,24 @@ async function alertResearchTrade(opp) {
 
 ━━━ *TOP TRADER TIP:* ━━━
 💡 *Bade traders yeh karte hain:*
-1️⃣ Pehle RESOLUTION RULES padho (market page pe)
-2️⃣ Google News pe latest khabar dhundho
-3️⃣ Twitter pe live reactions dekho
-4️⃣ Agar tumhe koi aisi info mile jo market ne price nahi ki → TRADE LO
-5️⃣ Agar kuch confirm nahi → SKIP KARO
+1️⃣ Pehle RESOLUTION RULES padho
+2️⃣ Google News aur Twitter pe latest info dekho
+3️⃣ Agar market ne info price nahi ki → TRADE LO
 
 ━━━ *RESEARCH LINKS:* ━━━
 ${researchSection}
 ━━━ *RISK:* ━━━
 💰 Max lagao: *${formatMoney(opp.maxBet)}*
-⚠️ Sirf trade lo agar research se CONFIDENT ho
 📊 Research Score: ${opp.researchScore}/10
 
 ⏰ ${new Date().toLocaleTimeString()}
 `;
-  await send(msg);
+
+  await send(msg, {
+    reply_markup: {
+      inline_keyboard: [[{ text: `🌐 Open on ${opp.platform.toUpperCase()}`, url: opp.url }]]
+    }
+  });
 }
 
 module.exports = {

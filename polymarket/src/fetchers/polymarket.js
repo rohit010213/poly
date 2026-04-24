@@ -18,7 +18,7 @@ const data = axios.create({
  */
 async function fetchMarkets() {
   try {
-    const res = await gamma.get('/events', {
+    const res = await gamma.get('/markets', {
       params: {
         active: true,
         closed: false,
@@ -26,43 +26,42 @@ async function fetchMarkets() {
       },
     });
 
-    const events = res.data || [];
+    const rawMarkets = res.data || [];
     const markets = [];
 
-    for (const event of events) {
-      if (!event.markets) continue;
+    for (const m of rawMarkets) {
+      try {
+        const outcomes = JSON.parse(m.outcomes || '[]');
+        const prices = JSON.parse(m.outcomePrices || '[]');
 
-      for (const market of event.markets) {
-        try {
-          const prices = JSON.parse(market.outcomePrices || '[]');
-          const outcomes = JSON.parse(market.outcomes || '[]');
-          const yesIdx = outcomes.findIndex(o => o.toLowerCase() === 'yes');
-          const noIdx = outcomes.findIndex(o => o.toLowerCase() === 'no');
+        const yesIdx = outcomes.findIndex(o => o.toLowerCase() === 'yes');
+        const noIdx = outcomes.findIndex(o => o.toLowerCase() === 'no');
 
-          const yesPrice = yesIdx !== -1 ? parseFloat(prices[yesIdx]) : null;
-          const noPrice = noIdx !== -1 ? parseFloat(prices[noIdx]) : null;
+        const yesPrice = yesIdx !== -1 ? parseFloat(prices[yesIdx]) : null;
+        const noPrice = noIdx !== -1 ? parseFloat(prices[noIdx]) : null;
 
-          if (!yesPrice || !noPrice) continue;
+        if (!yesPrice || !noPrice) continue;
 
-          markets.push({
-            platform: 'polymarket',
-            id: market.id,
-            eventId: event.id,
-            slug: market.slug || event.slug,
-            question: market.question || event.title,
-            yesPrice,
-            noPrice,
-            volume: parseFloat(market.volume || 0),
-            liquidity: parseFloat(market.liquidity || 0),
-            endDate: market.endDate || event.endDate,
-            active: market.active,
-            url: `https://polymarket.com/event/${event.slug}`,
-            clobTokenIds: market.clobTokenIds || [],
-            conditionId: market.conditionId,
-          });
-        } catch (parseErr) {
-          // skip malformed market
-        }
+        markets.push({
+          platform: 'polymarket',
+          id: m.id,
+          eventId: m.groupItemTitle || m.conditionId,
+          slug: m.slug,
+          question: m.question,
+          yesPrice,
+          noPrice,
+          volume: parseFloat(m.volume || 0),
+          volume24h: parseFloat(m.volume24hr || 0),
+          liquidity: parseFloat(m.liquidity || 0),
+          endDate: m.endDate,
+          active: m.active && !m.closed,
+          url: `https://polymarket.com/market/${m.slug}`,
+          clobTokenIds: JSON.parse(m.clobTokenIds || '[]'),
+          category: (m.category || 'General').toUpperCase(),
+          lastPrice: m.lastTradePrice ? parseFloat(m.lastTradePrice) : null,
+        });
+      } catch (e) {
+        // skip malformed
       }
     }
 

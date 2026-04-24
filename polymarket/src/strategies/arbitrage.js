@@ -35,14 +35,20 @@ function extractKeywords(text = '') {
 }
 
 /**
- * FAST: keyword index pre-filter + targeted fuzzy match
+ * FAST: Category-focused keyword index pre-filter + targeted fuzzy match
  */
 function matchMarkets(polyMarkets, kalshiMarkets) {
-  logger.info(`[Arbitrage] Matching ${polyMarkets.length} Poly × ${kalshiMarkets.length} Kalshi...`);
+  const RELEVANT_CATEGORIES = new Set(['ECONOMICS', 'POLITICS', 'CRYPTO']);
+  
+  // Filter for high-overlap categories only
+  const filteredPoly = polyMarkets.filter(m => RELEVANT_CATEGORIES.has(m.category));
+  const filteredKalshi = kalshiMarkets.filter(m => RELEVANT_CATEGORIES.has(m.category));
+
+  logger.info(`[Arbitrage] Focus Scan: ${filteredPoly.length} Poly × ${filteredKalshi.length} Kalshi (Filtered from ${polyMarkets.length}/${kalshiMarkets.length})`);
   const t0 = Date.now();
 
   // Pre-process kalshi: normalize text, build keyword index
-  const processedKalshi = kalshiMarkets.map(km => ({
+  const processedKalshi = filteredKalshi.map(km => ({
     ...km,
     _normalizedQ: normalizeText(km.question),
   }));
@@ -58,7 +64,7 @@ function matchMarkets(polyMarkets, kalshiMarkets) {
   const pairs = [];
   const seenPairs = new Set();
 
-  for (const poly of polyMarkets) {
+  for (const poly of filteredPoly) {
     const polyKws = extractKeywords(poly.question);
     if (polyKws.length === 0) continue;
 
