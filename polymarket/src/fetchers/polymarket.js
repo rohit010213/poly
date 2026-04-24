@@ -52,9 +52,9 @@ async function fetchMarkets() {
           category = 'SPORTS';
         } else {
           // High-overlap economic tickers
-          const isEcon = /fed|cpi|gdp|jobs|unempl|fomc|rate|interest|inflation|recession|gas|funds|economic|debt|deficit|treasury|yield/i.test(`${q} ${slug}`);
+          const isEcon = /\bfed\b|\bcpi\b|\bgdp\b|jobs|unempl|\bfomc\b|rate|interest|inflation|recession|gas|funds|economic|debt|deficit|treasury|yield/i.test(`${q} ${slug}`);
           // High-overlap political tickers
-          const isPoly = /trump|biden|election|president|vote|senate|congress|poll|confirm|shutdown|nominee|strait|war|conflict|israel|ukraine|china|iran|taiwan/i.test(`${q} ${slug}`);
+          const isPoly = /trump|biden|election|president|vote|senate|congress|poll|confirm|shutdown|nominee|strait|\bwar\b|conflict|israel|ukraine|china|\biran\b|taiwan/i.test(`${q} ${slug}`);
           // Crypto
           const isCrypto = /bitcoin|btc|eth|crypto|solana|sol|price|ledger|kraken|coinbase/i.test(`${q} ${slug}`);
 
