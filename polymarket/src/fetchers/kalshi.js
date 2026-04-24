@@ -36,18 +36,22 @@ async function fetchMarkets() {
         const yesPrice  = lastPrice || midPrice;
         const noPrice   = 1 - yesPrice;
 
-        // Robust Category Detection
+        // 🧠 Master Category Detection (Kalshi)
         const q = (m.title || '').toLowerCase();
-        const ticker = (m.event_ticker || '').toLowerCase();
+        const ticker = (m.event_ticker || m.ticker || '').toLowerCase();
         let category = (m.category || 'General').toUpperCase();
 
-        // If not already a target category, try guessing
-        if (!['ECONOMICS', 'POLITICS', 'CRYPTO', 'FINANCIALS'].includes(category)) {
-          const combined = `${q} ${ticker}`;
-          if (/bitcoin|btc|eth|crypto|solana|sol|price|ledger/i.test(combined)) category = 'CRYPTO';
-          else if (/fed|rate|cpi|inflation|gdp|jobs|unemployment|fomc|treasury|interest|recession|gas|funds|economic/i.test(combined)) category = 'ECONOMICS';
-          else if (/trump|biden|election|president|vote|senate|congress|poll|confirmed|shutdown|nominee|strait/i.test(combined)) category = 'POLITICS';
-        }
+        // High-overlap economic tickers
+        const isEcon = /fed|cpi|gdp|jobs|unempl|fomc|rate|interest|inflation|recession|gas|funds|economic|debt|deficit|treasury|yield|cpx|indx/i.test(`${q} ${ticker}`);
+        // High-overlap political tickers
+        const isPoly = /trump|biden|election|president|vote|senate|congress|poll|confirm|shutdown|nominee|strait|war|conflict|israel|ukraine|china/i.test(`${q} ${ticker}`);
+        // Crypto
+        const isCrypto = /bitcoin|btc|eth|crypto|solana|sol|price|ledger|kraken|coinbase/i.test(`${q} ${ticker}`);
+
+        if (isEcon) category = 'ECONOMICS';
+        else if (isPoly) category = 'POLITICS';
+        else if (isCrypto) category = 'CRYPTO';
+        else if (category === 'FINANCIALS') category = 'ECONOMICS'; // Map Kalshi Financials to Economics
 
         return {
           platform:   'kalshi',

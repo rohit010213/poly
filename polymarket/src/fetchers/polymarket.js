@@ -42,17 +42,22 @@ async function fetchMarkets() {
 
         if (!yesPrice || !noPrice) continue;
 
-        // Robust Category Detection
+        // 🧠 Master Category Detection (Polymarket)
         const q = (m.question || '').toLowerCase();
         const slug = (m.slug || '').toLowerCase();
         let category = (m.category || 'General').toUpperCase();
         
-        if (!['ECONOMICS', 'POLITICS', 'CRYPTO', 'FINANCIALS'].includes(category)) {
-          const combined = `${q} ${slug}`;
-          if (/bitcoin|btc|eth|crypto|solana|sol|price|ledger/i.test(combined)) category = 'CRYPTO';
-          else if (/fed|rate|cpi|inflation|gdp|jobs|unemployment|fomc|treasury|interest|recession|gas|funds|economic/i.test(combined)) category = 'ECONOMICS';
-          else if (/trump|biden|election|president|vote|senate|congress|poll|confirmed|shutdown|nominee|strait/i.test(combined)) category = 'POLITICS';
-        }
+        // High-overlap economic tickers
+        const isEcon = /fed|cpi|gdp|jobs|unempl|fomc|rate|interest|inflation|recession|gas|funds|economic|debt|deficit|treasury|yield/i.test(`${q} ${slug}`);
+        // High-overlap political tickers
+        const isPoly = /trump|biden|election|president|vote|senate|congress|poll|confirm|shutdown|nominee|strait|war|conflict|israel|ukraine|china/i.test(`${q} ${slug}`);
+        // Crypto
+        const isCrypto = /bitcoin|btc|eth|crypto|solana|sol|price|ledger|kraken|coinbase/i.test(`${q} ${slug}`);
+
+        if (isEcon) category = 'ECONOMICS';
+        else if (isPoly) category = 'POLITICS';
+        else if (isCrypto) category = 'CRYPTO';
+        else if (category === 'FINANCIALS' || category === 'BUSINESS') category = 'ECONOMICS';
 
         markets.push({
           platform: 'polymarket',
