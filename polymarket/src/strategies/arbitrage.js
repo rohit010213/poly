@@ -38,7 +38,7 @@ function extractKeywords(text = '') {
  * FAST: Category-focused keyword index pre-filter + targeted fuzzy match
  */
 function matchMarkets(polyMarkets, kalshiMarkets) {
-  const RELEVANT_CATEGORIES = new Set(['ECONOMICS', 'POLITICS', 'CRYPTO']);
+  const RELEVANT_CATEGORIES = new Set(['ECONOMICS', 'POLITICS', 'CRYPTO', 'FINANCIALS', 'FINANCE', 'BUSINESS']);
   
   // Filter for high-overlap categories only
   const filteredPoly = polyMarkets.filter(m => RELEVANT_CATEGORIES.has(m.category));
