@@ -28,6 +28,9 @@ async function fetchMarkets() {
       const res = await api.get('/markets', { params });
       const body = res.data;
 
+      // Rate limit safety
+      await new Promise(r => setTimeout(r, 500));
+
       const markets = (body.markets || []).map(m => {
         // Kalshi prices are in cents (0-100), normalize to 0-1
         // Prefer last_price if available, fallback to mid-price

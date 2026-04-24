@@ -61,7 +61,7 @@ const config = {
     researchMinScore: parseFloat(process.env.RESEARCH_MIN_SCORE) || 1,   // Min research potential
   },
   scanner: {
-    intervalSeconds: parseInt(process.env.SCAN_INTERVAL_SECONDS) || 30,
+    intervalSeconds: parseInt(process.env.SCAN_INTERVAL_SECONDS) || 60,
     marketsPerFetch: 2000,
     fuzzyMatchScore: 0.4,
   },
