@@ -90,11 +90,12 @@ function matchMarkets(polyMarkets, kalshiMarkets) {
 
   const high = pairs.filter(p => p.matchQuality === 'HIGH').length;
   const med = pairs.filter(p => p.matchQuality === 'MEDIUM').length;
-  logger.info(`[Arbitrage] Matched ${pairs.length} pairs (HIGH:${high} MED:${med})`);
+  logger.info(`[Arbitrage] Scan complete (Matched:${pairs.length} HIGH:${high} MED:${med})`);
 
-  if (pairs.length > 0) {
-    const bestMatch = pairs.sort((a, b) => a.matchScore - b.matchScore)[0];
-    logger.info(`  → Best Match: "${bestMatch.polyMarket.question.slice(0, 30)}..." with "${bestMatch.kalshiMarket.question.slice(0, 30)}..." [Score: ${bestMatch.matchScore.toFixed(3)}]`);
+  // Log the best possible match found (for debugging)
+  if (processedKalshi.length > 0 && filteredPoly.length > 0) {
+     // This is just to see what's failing to match
+     logger.info(`  → Best Raw Match Score: ${pairs.length > 0 ? pairs.sort((a,b)=>a.matchScore-b.matchScore)[0].matchScore.toFixed(3) : 'No decent match found'}`);
   }
 
   return pairs;

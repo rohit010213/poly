@@ -15,9 +15,9 @@ const CORRELATION_GROUPS = [
   {
     name: 'CRYPTO_BETA',
     members: [
-      { ticker: 'BTC', keywords: ['bitcoin', 'btc', 'price of bitcoin'] },
-      { ticker: 'ETH', keywords: ['ethereum', 'eth', 'price of ethereum'] },
-      { ticker: 'SOL', keywords: ['solana', 'sol', 'price of solana'] }
+      { ticker: 'BTC', keywords: ['bitcoin', 'btc'] },
+      { ticker: 'ETH', keywords: ['ethereum', 'eth'] },
+      { ticker: 'SOL', keywords: ['solana', 'sol'] }
     ],
     correlationFactor: 0.85
   },
